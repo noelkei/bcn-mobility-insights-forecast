@@ -1,1 +1,10 @@
+streamlit
+pandas
+numpy
+matplotlib
+plotly
+prophet
+geopandas
+folium
+requests
 
