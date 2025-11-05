@@ -1,51 +1,95 @@
-# CODIGO PROVISIONAL PARA HACER PRUEBAS
 import streamlit as st
-from src import data_preprocessing, visualization, heatmap, clima_eventos, forecasting, simulation
+import pandas as pd
+import gdown
+import os
+import plotly.express as px
 
-# --- CONFIGURACIÓN INICIAL ---
-st.set_page_config(page_title="OPTIMET-BCN", layout="wide")
-
-# --- SIDEBAR ---
-st.sidebar.title("OPTIMET-BCN")
-st.sidebar.markdown("### Mobility Data Intelligence Dashboard")
-
-menu = st.sidebar.radio(
-    "Selecciona un módulo:",
-    [
-        "Exploración y calidad de datos",
-        "Visualizaciones generales",
-        "Heatmap de movilidad",
-        "Clima y eventos",
-        "Predicción de movilidad",
-        "Simulación y optimización"
-    ]
+# ==============================
+# CONFIGURACIÓN BÁSICA
+# ==============================
+st.set_page_config(
+    page_title="OPTIMET-BCN",
+    page_icon="📊",
+    layout="wide"
 )
 
-# --- CARGA DE DATOS ---
+st.title("📊 OPTIMET-BCN – Data Explorer")
+st.markdown("### Explorador inicial del dataset combinado (movilidad + clima + eventos)")
+
+
+# ==============================
+# FUNCIÓN PARA CARGAR LOS DATOS
+# ==============================
 @st.cache_data
 def load_data():
-    import pandas as pd
-    df = pd.read_csv("data/processed/movilidad_clean.csv")
+    file_id = "14bu2pLuT3oF9E9UG1X2I3lqWu4xMmYbA"  # ENLACE REAL (NO CHAT)
+    url = f"https://drive.google.com/uc?id={file_id}"
+    output_path = "data/movilidad_combinada.csv"
+
+    # Crear carpeta si no existe
+    os.makedirs("data", exist_ok=True)
+
+    # Descargar solo si no existe localmente
+    if not os.path.exists(output_path):
+        st.info("📥 Descargando dataset desde Google Drive (solo la primera vez)...")
+        gdown.download(url, output_path, quiet=False)
+
+    # Cargar el dataset
+    df = pd.read_csv(output_path)
     return df
 
-data = load_data()
 
-# --- CONTENIDO PRINCIPAL ---
-if menu == "Exploración y calidad de datos":
-    data_preprocessing.show(data)
+# ==============================
+# CARGA DE DATOS
+# ==============================
+try:
+    df = load_data()
+    st.success("✅ Dataset cargado correctamente desde Google Drive")
+except Exception as e:
+    st.error(f"❌ Error al cargar el dataset: {e}")
+    st.stop()
 
-elif menu == "Visualizaciones generales":
-    visualization.show(data)
 
-elif menu == "Heatmap de movilidad":
-    heatmap.show(data)
+# ==============================
+# EXPLORACIÓN BÁSICA
+# ==============================
+st.subheader("📋 Vista previa de los datos")
+st.dataframe(df.head(10))
 
-elif menu == "Clima y eventos":
-    clima_eventos.show(data)
+# Información básica
+st.subheader("📈 Información general")
+col1, col2, col3 = st.columns(3)
+col1.metric("Número de registros", f"{len(df):,}")
+col2.metric("Número de columnas", len(df.columns))
+if "day" in df.columns:
+    col3.metric("Rango temporal", f"{df['day'].min()} → {df['day'].max()}")
 
-elif menu == "Predicción de movilidad":
-    forecasting.show(data)
+# ==============================
+# VISUALIZACIÓN DE EJEMPLO
+# ==============================
+st.subheader("📅 Evolución de los viajes diarios")
 
-elif menu == "Simulación y optimización":
-    simulation.show(data)
+if "day" in df.columns and "viajes" in df.columns:
+    df['day'] = pd.to_datetime(df['day'])
+    daily = df.groupby("day")["viajes"].sum().reset_index()
+
+    fig = px.line(
+        daily,
+        x="day",
+        y="viajes",
+        title="Tendencia diaria de movilidad",
+        labels={"day": "Fecha", "viajes": "Número de viajes"},
+    )
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("⚠️ No se encontraron las columnas 'day' o 'viajes' en el dataset.")
+
+
+# ==============================
+# PIE DE PÁGINA
+# ==============================
+st.markdown("---")
+st.caption("OPTIMET-BCN © 2025 – Telefónica Tech | Streamlit + Python")
+
+
 
