@@ -1,5 +1,5 @@
 import streamlit as st
-
+from src.visualization import render_visualizations
 # --- Page setup ---
 st.set_page_config(
     page_title="OPTIMET-BCN",
@@ -39,17 +39,7 @@ with tab1:
 
 # --- Tab 2: Visualizaciones ---
 with tab2:
-    st.header("Visualizaciones Generales")
-    st.warning("⚠️ Módulo en desarrollo.")
-    st.write("""
-    Esta vista ofrecerá gráficos interactivos que muestran patrones temporales y espaciales
-    de movilidad entre municipios y tipos de origen (residente, regional, nacional, internacional).
-
-    Se incluirán:
-    - Series temporales diarias y semanales.
-    - Comparativas por tipo de origen.
-    - Rankings de municipios emisores y receptores.
-    """)
+    render_visualizations()
 
 # --- Tab 3: Heatmap ---
 with tab3:
