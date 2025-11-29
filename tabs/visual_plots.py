@@ -1,30 +1,39 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import pydeck as pdk
-from utils.load_data import load_data
-from utils.geo_utils import get_geo_data
+
+from utils.state_manager import StateManager
 
 
 def render_visualizations():
     st.header("Visualizaciones Generales")
 
-    # ============================
-    # 1. Carga de datos
-    # ============================
-    df = load_data(r"C:\Users\berna\OneDrive\windowsAntiguo\Document\data\final_combined_with_events_2024.csv")
+    # ==========================================================
+    # 1. → Cargamos el DATASET Y GEODATA desde el STATE GLOBAL
+    # ==========================================================
+    global_state = StateManager("global")
 
-     # Aseguramos tipos básicos
+    df = global_state.get("df_main")
+    geo = global_state.get("df_geo")
+
+    if df is None or geo is None:
+        st.error("❌ Error: Los datos globales no están cargados en el StateManager.")
+        st.info("Asegúrate de que main.py ejecuta StateManager y carga los datasets.")
+        return
+
+    # ==========================================================
+    # 2. Asegurar tipos básicos (solo se hace una vez)
+    # ==========================================================
     if not pd.api.types.is_datetime64_any_dtype(df["day"]):
         df["day"] = pd.to_datetime(df["day"], errors="coerce")
 
     df["viajes"] = pd.to_numeric(df["viajes"], errors="coerce").fillna(0)
 
-    # ============================
-    # 2. Controles (selectores)
-    # ============================
+    # ==========================================================
+    # 3. Controles (selectores)
+    # ==========================================================
     col_left, col_right = st.columns([2, 1])
 
     with col_left:
@@ -51,15 +60,12 @@ def render_visualizations():
 
     st.markdown(f"**Filas filtradas:** {len(df_filtrado):,}")
 
-    # ============================
-    # 3. MINIMAPA con Pydeck
-    # ============================
+    # ==========================================================
+    # 4. MINIMAPA Pydeck
+    # ==========================================================
     st.subheader("🗺️ Minimapa de destinos desde el municipio origen")
 
-    # Cargamos coordenadas de municipios desde tu CSV de geodata
-    geo = get_geo_data()  # debe devolver columnas: municipio, lat, lon
-
-    # Agregamos viajes totales desde el municipio origen hacia cada destino
+    # Agregamos viajes por municipio destino
     df_map = (
         df[df["municipio_origen_name"] == municipio_sel]
         .groupby("municipio_destino_name", as_index=False)["viajes"]
@@ -69,26 +75,18 @@ def render_visualizations():
 
     # Join con coordenadas
     df_map = df_map.merge(geo, on="municipio", how="left")
-
-    # Eliminamos destinos sin coordenadas
     df_map = df_map.dropna(subset=["lat", "lon"])
 
     if df_map.empty:
         st.info("No hay datos geográficos para los destinos de este municipio.")
     else:
-        # -------------------------------
-        # RADIUS SCALING (log + min/max)
-        # -------------------------------
         vmax = df_map["viajes"].max()
-
-        # Radios mínimo y máximo (ajusta si quieres)
-        MIN_RADIUS = 120     # radio para los más pequeños
-        MAX_RADIUS = 1500    # radio para los más grandes
+        MIN_RADIUS = 120
+        MAX_RADIUS = 1500
 
         if vmax == 0:
             df_map["radius"] = MIN_RADIUS
         else:
-            # Escalado logarítmico: diferencias visibles pero controladas
             df_map["radius"] = MIN_RADIUS + (
                 (MAX_RADIUS - MIN_RADIUS)
                 * (np.log1p(df_map["viajes"]) / np.log1p(vmax))
@@ -98,14 +96,13 @@ def render_visualizations():
             "ScatterplotLayer",
             data=df_map,
             get_position="[lon, lat]",
-            get_radius="radius",   # usamos la columna ya escalada
-            radius_scale=1,
+            get_radius="radius",
             pickable=True,
             get_fill_color=[0, 0, 255, 160],
         )
 
         view_state = pdk.ViewState(
-            latitude=41.39,   # centro aprox. Barcelona
+            latitude=41.39,
             longitude=2.17,
             zoom=9,
             pitch=0,
@@ -126,9 +123,9 @@ def render_visualizations():
 
     st.markdown("---")
 
-    # ============================
-    # 4. Serie temporal de viajes diarios
-    # ============================
+    # ==========================================================
+    # 5. Serie temporal viajes diarios
+    # ==========================================================
     st.subheader("📈 Serie temporal de viajes diarios")
 
     if df_filtrado.empty:
@@ -147,13 +144,12 @@ def render_visualizations():
         )
         st.plotly_chart(fig_ts, use_container_width=True)
 
-    # ============================
-    # 5. Promedio semanal (día de la semana)
-    # ============================
+    # ==========================================================
+    # 6. Promedio semanal
+    # ==========================================================
     st.subheader("📅 Promedio por día de la semana")
 
     if not df_filtrado.empty:
-        # Ya tienes 'day_of_week' en el CSV (Domingo, Lunes, etc.)
         df_week = (
             df_filtrado.groupby("day_of_week", as_index=False)["viajes"]
             .mean()
@@ -169,9 +165,9 @@ def render_visualizations():
     else:
         st.info("Sin datos suficientes para calcular el promedio semanal.")
 
-    # ============================
-    # 6. Comparativa por tipo de origen
-    # ============================
+    # ==========================================================
+    # 7. Comparativa por tipo de origen
+    # ==========================================================
     st.subheader("🏷️ Comparativa por tipo de origen")
 
     df_tipo = (
@@ -189,10 +185,10 @@ def render_visualizations():
     )
     st.plotly_chart(fig_tipo, use_container_width=True)
 
-    # ============================
-    # 7. Top N municipios destino
-    # ============================
-    st.subheader("🏆 Top municipios destino desde el origen seleccionado")
+    # ==========================================================
+    # 8. Top N destinos
+    # ==========================================================
+    st.subheader("🏆 Top municipios destino")
 
     topN = (
         df[df["municipio_origen_name"] == municipio_sel]
@@ -217,9 +213,9 @@ def render_visualizations():
         )
         st.plotly_chart(fig_top, use_container_width=True)
 
-    # ============================
-    # 8. Proporción intra vs intermunicipal
-    # ============================
+    # ==========================================================
+    # 9. Proporción intra vs intermunicipal
+    # ==========================================================
     st.subheader("🔄 Proporción de movilidad intra vs intermunicipal")
 
     df_mov = df[df["municipio_origen_name"] == municipio_sel].copy()
@@ -234,6 +230,7 @@ def render_visualizations():
         df_mov.groupby("tipo_mov", as_index=False)["viajes"]
         .sum()
     )
+
     total_viajes = prop["viajes"].sum()
     if total_viajes > 0:
         prop["porcentaje"] = (prop["viajes"] / total_viajes * 100).round(2)
@@ -246,9 +243,9 @@ def render_visualizations():
     )
     st.plotly_chart(fig_pie, use_container_width=True)
 
-    # ============================
-    # 9. Exportar datos filtrados
-    # ============================
+    # ==========================================================
+    # 10. Exportar CSV
+    # ==========================================================
     st.subheader("📤 Exportar datos filtrados")
 
     csv = df_filtrado.to_csv(index=False).encode("utf-8")
