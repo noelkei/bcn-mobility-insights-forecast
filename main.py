@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from tabs.prediccion_od import main as prediccion_od_main
+from tabs.weather_events import render_weather_events
 
 from utils.state_manager import StateManager
 from utils.load_data import load_data
@@ -45,7 +46,7 @@ global_state.init({
 # --- Load main dataset ---
 df_main = global_state.get("df_main")
 if df_main is None:
-    df_main = load_data("processed/final_combined_with_events_2024.csv")
+    df_main = load_data("processed/final_combined_2023_2024.csv")
     global_state.set("df_main", df_main)
 
 if df_main is not None and not df_main.empty:
@@ -132,7 +133,7 @@ with tab3:
 # -------------------------------------------------------------
 with tab4:
     st.header("Clima y Eventos")
-    st.warning("⚠️ Módulo en desarrollo.")
+    render_weather_events()
 
 
 # -------------------------------------------------------------
