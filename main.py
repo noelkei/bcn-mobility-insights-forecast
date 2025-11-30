@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from tabs.prediccion_od import main as prediccion_od_main
 
 from utils.state_manager import StateManager
 from utils.load_data import load_data
@@ -138,8 +139,7 @@ with tab4:
 # Tab 5
 # -------------------------------------------------------------
 with tab5:
-    st.header("Predicción")
-    st.warning("⚠️ Módulo en desarrollo.")
+    prediccion_od_main()
 
 
 # -------------------------------------------------------------

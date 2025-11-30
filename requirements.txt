@@ -48,3 +48,6 @@ cachetools==5.5.0
 ipykernel==6.29.5
 jupyterlab==4.2.5
 
+joblib
+altair
+
