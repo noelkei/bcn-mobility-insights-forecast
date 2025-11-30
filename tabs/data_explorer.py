@@ -128,43 +128,7 @@ st.subheader("📍 Registros con viajes = 0")
 st.dataframe(faltantes.head(20))
 
 
-# ======================================
-# SECCIÓN: MINI MAPA DE MUNICIPIOS
-# ======================================
-st.header("🗺️ Mapa de densidad de registros por municipio")
-
-muni_path = data_folder + "municipios.geojson"
-
-if os.path.exists(muni_path):
-    gdf = gpd.read_file(muni_path)
-    gdf = gdf.merge(
-        df.groupby("origin")["viajes"].sum().reset_index(),
-        left_on="code",
-        right_on="origin",
-        how="left"
-    ).fillna(0)
-
-    midpoint = [gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()]
-
-    layer = pdk.Layer(
-        "GeoJsonLayer",
-        data=gdf,
-        get_fill_color="[255 * (viajes / viajes.max()), 50, 50, 150]",
-        pickable=True,
-        auto_highlight=True
-    )
-
-    view_state = pdk.ViewState(latitude=midpoint[0], longitude=midpoint[1], zoom=8)
-
-    st.pydeck_chart(pdk.Deck(
-        initial_view_state=view_state,
-        layers=[layer],
-        tooltip={"text": "{name}: {viajes} viajes"}
-    ))
-else:
-    st.warning("No se encontró el archivo municipios.geojson")
-
-
 st.markdown("---")
 st.caption("Módulo 1 · Exploración y Calidad de Datos · OPTIMET-BCN")
+
 
