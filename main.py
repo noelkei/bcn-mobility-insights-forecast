@@ -115,7 +115,7 @@ with tab1:
     st.markdown("### 📁 Carga y vista general del dataset")
 
     try:
-        df = load_dataset_fast()
+        df = df_main.copy()
         st.success("Dataset cargado correctamente")
     except Exception as e:
         st.error(f"Error cargando dataset: {e}")
@@ -165,9 +165,6 @@ with tab1:
     st.markdown("**Registros con 'viajes = 0'**")
     st.dataframe(df[df["viajes"] == 0].head(20))
 
-   
-    else:
-        st.warning("❗ No se encontró comarques-barcelona.geojson en data/")
 
 # -------------------------------------------------------------
 # Tab 2
