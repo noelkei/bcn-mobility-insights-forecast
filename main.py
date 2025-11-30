@@ -14,8 +14,8 @@ from utils.optimizer_utils import (
 )
 
 from tabs.visual_plots import render_visualizations
+from tabs.heatmap_mobility import render_heatmap_mobility
 # from tabs.data_explorer import show as show_data_explorer
-# from tabs.heatmap_mobility import show as show_heatmap
 # ...
 
 
@@ -45,7 +45,7 @@ global_state.init({
 # --- Load main dataset ---
 df_main = global_state.get("df_main")
 if df_main is None:
-    df_main = load_data("processed/final_combined_with_events_2024.csv")
+    df_main = load_data("processed/final_combined_2023_2024.csv")
     global_state.set("df_main", df_main)
 
 if df_main is not None and not df_main.empty:
@@ -123,8 +123,7 @@ with tab2:
 # Tab 3
 # -------------------------------------------------------------
 with tab3:
-    st.header("Heatmap de Movilidad")
-    st.warning("⚠️ Módulo en desarrollo.")
+    render_heatmap_mobility()
 
 
 # -------------------------------------------------------------
