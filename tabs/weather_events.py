@@ -8,29 +8,18 @@ from utils.state_manager import StateManager
 
 
 def render_weather_events() -> None:
-    """
-    Tab 4 – Weather & Events ("Contextual view")
+    st.header("🌦️ Clima y Eventos: Impacto en la Movilidad")
 
-    Analyses how weather (tavg, prcp, …) and events (event(y/n), name, attendance)
-    are related to mobility (viajes).
-    """
-    st.header("🌦️ Weather & Events Impact on Mobility")
-
-    # -------------------------------------------------------------------------
-    # 1. Load global data from StateManager
-    # -------------------------------------------------------------------------
+    # Cargar datos globales
     global_state = StateManager("global")
     df = global_state.get("df_main")
-    geo = global_state.get("df_geo")  # municipalities with lat / lon
+    geo = global_state.get("df_geo")
 
     if df is None:
-        st.error("Global dataset (df_main) is not loaded in StateManager('global').")
-        st.info("Check that main.py loads the combined dataset into df_main.")
+        st.error("No se ha cargado el dataset combinado en StateManager('global').")
         return
 
-    # -------------------------------------------------------------------------
-    # 2. Basic type cleaning (only once, dataframe is cached globally)
-    # -------------------------------------------------------------------------
+    # Conversión de tipos
     if not pd.api.types.is_datetime64_any_dtype(df["day"]):
         df["day"] = pd.to_datetime(df["day"], errors="coerce")
 
@@ -39,15 +28,9 @@ def render_weather_events() -> None:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Flag days with at least one event
-    if "event(y/n)" in df.columns:
-        df["has_event"] = df["event(y/n)"].astype(str).str.lower().eq("y")
-    else:
-        df["has_event"] = False
+    df["has_event"] = df["event(y/n)"].astype(str).str.lower().eq("y") if "event(y/n)" in df.columns else False
 
-    # -------------------------------------------------------------------------
-    # 3. Daily aggregation: mobility + weather + events
-    # -------------------------------------------------------------------------
+    # Agregación diaria
     daily = (
         df.groupby("day", as_index=False)
         .agg(
@@ -63,26 +46,21 @@ def render_weather_events() -> None:
     )
 
     if daily.empty:
-        st.warning("No daily data available after aggregation.")
+        st.warning("No hay datos después de la agregación diaria.")
         return
 
     min_day = daily["day"].min().date()
     max_day = daily["day"].max().date()
 
-    # -------------------------------------------------------------------------
-    # 4. Controls – date range
-    # -------------------------------------------------------------------------
-    st.subheader("📅 Date range")
-
+    st.subheader("📅 Rango de fechas")
     date_range = st.date_input(
-        "Select date range",
+        "Selecciona el rango de fechas",
         value=(min_day, max_day),
         min_value=min_day,
         max_value=max_day,
-        help="This range will be used for all charts and statistics below.",
+        help="Este rango se aplicará a todos los gráficos y KPIs."
     )
 
-    # date_input can return a single date or a tuple
     if isinstance(date_range, tuple):
         start_date, end_date = date_range
     else:
@@ -92,228 +70,151 @@ def render_weather_events() -> None:
     daily_sel = daily.loc[mask].copy()
 
     if daily_sel.empty:
-        st.info("No data in the selected date range.")
+        st.info("No hay datos en el rango seleccionado.")
         return
 
-    # -------------------------------------------------------------------------
-    # 5. KPI mini-dashboard
-    # -------------------------------------------------------------------------
-    st.subheader("📊 Summary for selected period")
-
+    # KPIs
+    st.subheader("📊 Resumen del periodo seleccionado")
     total_trips = int(daily_sel["viajes"].sum())
     avg_temp = float(daily_sel["tavg"].mean()) if "tavg" in daily_sel else np.nan
     total_rain = float(daily_sel["prcp"].sum()) if "prcp" in daily_sel else np.nan
     days_with_events = int(daily_sel["has_event"].sum())
     total_att = int(daily_sel["total_attendance"].sum())
 
+    def format_eu(n):
+        return f"{n:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    def format_kpi(n):
+        if n >= 1_000_000:
+            return f"{n/1_000_000:.1f} millones".replace(".", ",")
+        return format_eu(n)
+
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Total trips", f"{total_trips:,}")
-    c2.metric("Avg. temperature (°C)", f"{avg_temp:.1f}" if not np.isnan(avg_temp) else "—")
-    c3.metric("Total rain (mm)", f"{total_rain:.1f}" if not np.isnan(total_rain) else "—")
-    c4.metric("Days with events", days_with_events)
-    c5.metric("Total attendance", f"{total_att:,}")
+    c1.metric("Viajes totales", format_eu(total_trips))
+    c2.metric("Temperatura media (°C)", format_eu(avg_temp) if not np.isnan(avg_temp) else "—")
+    c3.metric("Lluvia total (mm)", format_eu(total_rain) if not np.isnan(total_rain) else "—")
+    c4.metric("Días con eventos", days_with_events)
+    c5.metric("Asistencia total", format_kpi(total_att))
 
     st.markdown("---")
 
-    # -------------------------------------------------------------------------
-    # 6. Mobility vs Weather
-    # -------------------------------------------------------------------------
-    st.subheader("🌧️ Mobility vs precipitation")
-
+    # Gráfico: viajes vs precipitación
+    st.subheader("🌧️ Viajes vs precipitación diaria")
     if "prcp" in daily_sel.columns:
         fig_prcp = px.scatter(
             daily_sel,
             x="prcp",
             y="viajes",
-            color="has_event",
             size="total_attendance",
-            labels={"prcp": "Daily precipitation (mm)", "viajes": "Trips"},
-            title="Trips vs precipitation (event days in color)",
+            labels={"prcp": "Precipitación diaria (mm)", "viajes": "Viajes"},
         )
         st.plotly_chart(fig_prcp, use_container_width=True)
-    else:
-        st.info("Column 'prcp' is not available in the dataset.")
 
-    st.subheader("🌡️ Mobility vs temperature")
-
+    st.subheader("🌡️ Viajes vs temperatura media")
     if "tavg" in daily_sel.columns:
         fig_temp = px.scatter(
             daily_sel,
             x="tavg",
             y="viajes",
-            color="has_event",
             size="total_attendance",
-            labels={"tavg": "Average temperature (°C)", "viajes": "Trips"},
-            title="Trips vs average temperature (event days in color)",
+            labels={"tavg": "Temperatura media (°C)", "viajes": "Viajes"},
         )
         st.plotly_chart(fig_temp, use_container_width=True)
-    else:
-        st.info("Column 'tavg' is not available in the dataset.")
-
-    # -------------------------------------------------------------------------
-    # 7. Simple correlations
-    # -------------------------------------------------------------------------
-    st.subheader("📐 Correlations (selected period)")
-
-    corr_cols = [c for c in ["viajes", "prcp", "tavg"] if c in daily_sel.columns]
-    if len(corr_cols) >= 2:
-        corr_matrix = daily_sel[corr_cols].corr().round(2)
-        st.dataframe(corr_matrix)
-    else:
-        st.info("Not enough numeric columns to compute correlations.")
 
     st.markdown("---")
 
-    # -------------------------------------------------------------------------
-    # 8. Events over time – highlighting event days
-    # -------------------------------------------------------------------------
-    st.subheader("🎟️ Events over time")
-
+    # Gráfico de series temporales con eventos
+    st.subheader("🎟️ Eventos en el tiempo")
     fig_ts = px.line(
         daily_sel,
         x="day",
         y="viajes",
-        title="Daily trips with event days highlighted",
-        labels={"day": "Date", "viajes": "Trips"},
+        labels={"day": "Fecha", "viajes": "Viajes"},
     )
-
-    # Add event markers
     event_days = daily_sel[daily_sel["has_event"]].copy()
     if not event_days.empty:
         fig_ts.add_scatter(
             x=event_days["day"],
             y=event_days["viajes"],
             mode="markers",
-            name="Event day",
+            name="Día con evento",
             marker=dict(size=9),
         )
-
     st.plotly_chart(fig_ts, use_container_width=True)
 
-    # Show table of days with events in the selected range
-    st.write("#### Event days in selected period")
+    st.write("#### Días con evento en el periodo seleccionado")
     if not event_days.empty:
-        st.dataframe(
-            event_days[["day", "viajes", "total_attendance"]],
-            use_container_width=True,
-        )
+        df_disp = event_days[["day", "viajes", "total_attendance"]].copy()
+        df_disp["total_attendance"] = df_disp["total_attendance"].apply(format_kpi)
+        st.dataframe(df_disp, use_container_width=True)
     else:
-        st.info("No event days in the selected period.")
+        st.info("No hay días con evento en este periodo.")
 
     st.markdown("---")
 
-    # -------------------------------------------------------------------------
-    # 9. Ranking of impact: Δ trips on event days
-    #    Δ = trips_day_event − rolling mean of previous 7 days
-    # -------------------------------------------------------------------------
-    st.subheader("🏆 Impact ranking of event days")
-
+    # Ranking impacto eventos
+    st.subheader("🏆 Ranking de impacto de eventos")
     daily_sorted = daily.sort_values("day").copy()
-    daily_sorted["baseline"] = (
-        daily_sorted["viajes"]
-        .rolling(window=7, min_periods=3)
-        .mean()
-        .shift(1)
-    )
+    daily_sorted["baseline"] = daily_sorted["viajes"].rolling(window=7, min_periods=3).mean().shift(1)
     daily_sorted["delta"] = daily_sorted["viajes"] - daily_sorted["baseline"]
 
-    ranking = (
-        daily_sorted[
-            (daily_sorted["has_event"])
-            & daily_sorted["baseline"].notna()
-        ]
-        .sort_values("delta", ascending=False)
-        .head(10)
-    )
-
+    ranking = daily_sorted[(daily_sorted["has_event"]) & daily_sorted["baseline"].notna()].sort_values("delta", ascending=False).head(10)
     if ranking.empty:
-        st.info("Not enough history to compute impact ranking for event days.")
+        st.info("No hay suficientes datos para calcular el ranking.")
     else:
-        ranking_display = ranking[["day", "viajes", "baseline", "delta", "total_attendance"]]
+        ranking_display = ranking[["day", "viajes", "baseline", "delta", "total_attendance"]].copy()
         ranking_display["baseline"] = ranking_display["baseline"].round(1)
         ranking_display["delta"] = ranking_display["delta"].round(1)
-
+        ranking_display.columns = ["Fecha", "Viajes", "Promedio anterior", "Variación frente al promedio", "Asistencia total"]
+        ranking_display["Asistencia total"] = ranking_display["Asistencia total"].apply(format_kpi)
         st.dataframe(ranking_display, use_container_width=True)
 
     st.markdown("---")
 
-    # -------------------------------------------------------------------------
-    # 10. Optional map: heatmap of trips on an event day (if geo is available)
-    # -------------------------------------------------------------------------
+    # Mapa de calor
     if geo is not None and not geo.empty:
-        st.subheader("🗺️ Mobility heatmap on a selected event day")
+        st.subheader("🗺️ Mapa de calor de movilidad")
 
-        # Only days with events and inside the selected range
-        event_days_full = daily_sorted[daily_sorted["has_event"]]["day"].dt.date.unique()
-        event_days_range = [
-            d for d in event_days_full
-            if start_date <= d <= end_date
-        ]
+        available_days = df["day"].dt.date.unique()
+        selected_day = st.selectbox(
+            "Selecciona un día para visualizar el mapa",
+            options=sorted(d for d in available_days if start_date <= d <= end_date),
+        )
 
-        if event_days_range:
-            selected_event_day = st.selectbox(
-                "Select an event day for the map",
-                options=sorted(event_days_range),
+        df_day = df[df["day"].dt.date == selected_day].copy()
+        if df_day.empty:
+            st.info("No hay registros para el día seleccionado.")
+        else:
+            df_map = (
+                df_day.groupby("municipio_destino_name", as_index=False)["viajes"]
+                .sum()
+                .rename(columns={"municipio_destino_name": "municipio"})
             )
+            df_map = df_map.merge(geo, on="municipio", how="left").dropna(subset=["lat", "lon"])
 
-            df_day = df[df["day"].dt.date == selected_event_day].copy()
-            if df_day.empty:
-                st.info("No trip records for the selected event day.")
+            if df_map.empty:
+                st.info("No hay datos geoespaciales para este día.")
             else:
-                # Aggregate by destination municipality
-                df_map = (
-                    df_day.groupby("municipio_destino_name", as_index=False)["viajes"]
-                    .sum()
-                    .rename(columns={"municipio_destino_name": "municipio"})
+                vmax = df_map["viajes"].max()
+                MIN_RADIUS = 120
+                MAX_RADIUS = 1500
+                df_map["radius"] = MIN_RADIUS + (
+                    (MAX_RADIUS - MIN_RADIUS)
+                    * (np.log1p(df_map["viajes"]) / np.log1p(vmax))
+                    if vmax > 0 else MIN_RADIUS
                 )
 
-                df_map = df_map.merge(geo, on="municipio", how="left")
-                df_map = df_map.dropna(subset=["lat", "lon"])
+                layer = pdk.Layer(
+                    "ScatterplotLayer",
+                    data=df_map,
+                    get_position="[lon, lat]",
+                    get_radius="radius",
+                    pickable=True,
+                    get_fill_color=[255, 140, 0, 160],
+                )
 
-                if df_map.empty:
-                    st.info("No geospatial data available for this event day.")
-                else:
-                    vmax = df_map["viajes"].max()
-                    MIN_RADIUS = 120
-                    MAX_RADIUS = 1500
-
-                    if vmax == 0:
-                        df_map["radius"] = MIN_RADIUS
-                    else:
-                        df_map["radius"] = MIN_RADIUS + (
-                            (MAX_RADIUS - MIN_RADIUS)
-                            * (np.log1p(df_map["viajes"]) / np.log1p(vmax))
-                        )
-
-                    layer = pdk.Layer(
-                        "ScatterplotLayer",
-                        data=df_map,
-                        get_position="[lon, lat]",
-                        get_radius="radius",
-                        pickable=True,
-                        get_fill_color=[255, 140, 0, 160],
-                    )
-
-                    view_state = pdk.ViewState(
-                        latitude=41.39,
-                        longitude=2.17,
-                        zoom=9,
-                        pitch=0,
-                    )
-
-                    tooltip = {
-                        "html": "<b>{municipio}</b><br/>Trips: {viajes}",
-                        "style": {"color": "white"},
-                    }
-
-                    st.pydeck_chart(
-                        pdk.Deck(
-                            layers=[layer],
-                            initial_view_state=view_state,
-                            tooltip=tooltip,
-                        )
-                    )
-        else:
-            st.info("No event days available for the map in the selected period.")
+                view_state = pdk.ViewState(latitude=41.39, longitude=2.17, zoom=9, pitch=0)
+                tooltip = {"html": "<b>{municipio}</b><br/>Viajes: {viajes}", "style": {"color": "white"}}
+                st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip=tooltip))
     else:
-        st.info("Geospatial data (df_geo) is not available; skipping map.")
+        st.info("No hay datos geoespaciales disponibles para mostrar el mapa.")
