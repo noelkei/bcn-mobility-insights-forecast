@@ -11,6 +11,8 @@ import os
 RUTA_2023 = "data/processed/final_combined_with_events_2023.csv"
 RUTA_2024 = "data/processed/final_combined_with_events_2024.csv"
 
+# CSV ya concatenado 2023+2024 (ajusta el nombre si es distinto)
+RUTA_CONCAT = "data/processed/final_combined_2023_2024.csv"
 
 # Carpeta donde guardamos el modelo
 MODELS_DIR = Path("models")
@@ -64,6 +66,38 @@ def preparar_df_od():
     df["timestep"] = (df["day"] - df["day"].min()).dt.days
 
     return df
+
+def cargar_df_concat():
+    """
+    Carga el CSV ya concatenado (2023+2024) y prepara el df
+    con las mismas columnas que preparar_df_od().
+    """
+    if not os.path.exists(RUTA_CONCAT):
+        # fallback: si no existe el CSV concatenado, usamos el flujo original
+        return preparar_df_od()
+
+    df = pd.read_csv(
+        RUTA_CONCAT,
+        usecols=["day", "municipio_origen_name", "municipio_destino_name", "viajes"],
+        parse_dates=["day"],
+    )
+
+    # Nos aseguramos de que está agregado por día / OD
+    df = df.groupby(
+        ["day", "municipio_origen_name", "municipio_destino_name"],
+        as_index=False
+    )["viajes"].sum()
+
+    df = df.sort_values("day").reset_index(drop=True)
+
+    # Features temporales (igual que en preparar_df_od)
+    df["day_of_week"] = df["day"].dt.weekday
+    df["day_of_year"] = df["day"].dt.day_of_year
+    df["month"] = df["day"].dt.month
+    df["timestep"] = (df["day"] - df["day"].min()).dt.days
+
+    return df
+
 
 
 # -----------------------------------------------------
@@ -124,8 +158,8 @@ def cargar_o_entrenar():
 
         min_date = pd.to_datetime(meta["min_date"])
 
-        # OJO: hace falta cargar df SOLO para histórico (no se usa para entrenar)
-        df = preparar_df_od()
+        # Para el histórico de la app leemos SOLO el CSV concatenado
+        df = cargar_df_concat()
 
         return df, model, le_origen, le_destino, min_date
 

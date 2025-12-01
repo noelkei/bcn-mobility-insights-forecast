@@ -3,8 +3,16 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import os
+
 from tabs.prediccion_od import main as prediccion_od_main
 from tabs.weather_events import render_weather_events
+from tabs.visual_plots import render_visualizations
+from tabs.heatmap_mobility import render_heatmap_mobility
+
+from tabs.simulation_optimizer import (
+    plot_optimization_matrices,
+    plot_optimization_maps,
+)
 
 from utils.state_manager import StateManager
 from utils.load_data import load_data
@@ -15,11 +23,6 @@ from utils.optimizer_utils import (
     summarize_optimization,
     build_links_table_for_date,
 )
-
-from tabs.visual_plots import render_visualizations
-from tabs.heatmap_mobility import render_heatmap_mobility
-# from tabs.data_explorer import show as show_data_explorer
-# ...
 
 
 # -------------------------------------------------------------
@@ -115,7 +118,7 @@ with tab1:
     st.markdown("### 📁 Carga y vista general del dataset")
 
     try:
-        df = load_dataset_fast()
+        df = df_main.copy()
         st.success("Dataset cargado correctamente")
     except Exception as e:
         st.error(f"Error cargando dataset: {e}")
@@ -165,9 +168,6 @@ with tab1:
     st.markdown("**Registros con 'viajes = 0'**")
     st.dataframe(df[df["viajes"] == 0].head(20))
 
-   
-    else:
-        st.warning("❗ No se encontró comarques-barcelona.geojson en data/")
 
 # -------------------------------------------------------------
 # Tab 2
@@ -223,6 +223,7 @@ with tab6:
     R_max = global_state.get("optimizer_R_max")
     df_share = global_state.get("optimizer_df_share")
     df_hist_od = global_state.get("optimizer_df_hist_od")
+    df_geo = global_state.get("df_geo")
 
     if (
         df_main is None or df_main.empty or
@@ -525,6 +526,20 @@ with tab6:
               menos enlaces muy calientes y menos recursos muertos en enlaces muy fríos.
             """
             )
+
+            # ================================
+            # 7) NUEVOS PLOTS: HEATMAP + MAPA
+            # ================================
+            st.subheader("5️⃣ Visualización de la temperatura por enlace")
+
+            st.markdown("##### 🔳 Heatmaps (matrices OD)")
+            plot_optimization_matrices(df_opt)
+
+            if df_geo is not None and not df_geo.empty:
+                st.markdown("##### 🗺️ Mapas de enlaces (antes / después)")
+                plot_optimization_maps(df_opt, df_geo)
+            else:
+                st.info("No hay df_geo disponible para dibujar el mapa de enlaces.")
 
         else:
             st.info("Cuando ejecutes una optimización, los resultados aparecerán aquí.")

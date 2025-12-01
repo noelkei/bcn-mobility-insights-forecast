@@ -1,5 +1,8 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.express as px
+import pydeck as pdk
 
 from utils.state_manager import StateManager
 from utils.optimizer_utils import (
@@ -12,7 +15,7 @@ from utils.optimizer_utils import (
 
 def _show_results(df_opt: pd.DataFrame, summary: dict):
     """
-    Muestra métricas y tablas de resultados de la optimización.
+    Versión antigua del resumen (no se usa en main.py, pero la dejamos por compatibilidad).
     """
     if df_opt.empty:
         st.warning("No hay resultados de optimización para mostrar.")
@@ -79,8 +82,8 @@ def _show_results(df_opt: pd.DataFrame, summary: dict):
 
 def show():
     """
-    Pestaña de Streamlit para la simulación y optimización de recursos
-    entre enlaces origen-destino.
+    Versión antigua de la pestaña (no usada actualmente en main.py).
+    La mantenemos por si quieres probarla aislada.
     """
     st.header("⚙️ Simulación y Optimización de Movilidad (OD)")
 
@@ -361,3 +364,210 @@ def show():
         _show_results(df_opt, summary)
     else:
         st.info("Pulsa el botón de optimización para ver resultados.")
+
+
+# =====================================================================
+# NUEVAS FUNCIONES DE PLOTEO PARA USAR DESDE main.py (Tab 6)
+# =====================================================================
+
+def plot_optimization_matrices(df_opt: pd.DataFrame) -> None:
+    """
+    Dibuja dos heatmaps en forma de matriz:
+    - Temperatura antes de optimizar (Temp. antes)
+    - Temperatura después de optimizar (Temp. después)
+    """
+    if df_opt.empty:
+        st.info("No hay enlaces para construir el heatmap de temperaturas.")
+        return
+
+    # Pivot: origen (filas) × destino (columnas)
+    def _build_matrix(df: pd.DataFrame, temp_col: str) -> pd.DataFrame:
+        mat = df.pivot_table(
+            index="origen",
+            columns="destino",
+            values=temp_col,
+            aggfunc="mean",
+        )
+        mat = mat.replace([np.inf, -np.inf], np.nan)
+        return mat
+
+    matrix_before = _build_matrix(df_opt, "temp_before")
+    matrix_after = _build_matrix(df_opt, "temp_after")
+
+    # Limitar tamaño por si acaso (aunque con foco Barcelona no debería ser enorme)
+    MAX_SIZE = 40
+
+    def _limit_matrix(mat: pd.DataFrame) -> pd.DataFrame:
+        if mat.shape[0] > MAX_SIZE:
+            mat = mat.iloc[:MAX_SIZE, :]
+        if mat.shape[1] > MAX_SIZE:
+            mat = mat.iloc[:, :MAX_SIZE]
+        return mat
+
+    matrix_before = _limit_matrix(matrix_before)
+    matrix_after = _limit_matrix(matrix_after)
+
+    # Rango de color común para comparar antes/después
+    combined = pd.concat(
+        [matrix_before.stack(dropna=True), matrix_after.stack(dropna=True)],
+        axis=0,
+        ignore_index=True,
+    )
+    combined = combined.replace([np.inf, -np.inf], np.nan).dropna()
+
+    if combined.empty:
+        st.info("No hay temperaturas finitas para dibujar el heatmap.")
+        return
+
+    vmin = float(combined.min())
+    vmax = float(combined.max())
+
+    st.markdown("#### 🔳 Heatmap de temperatura por enlace (antes de optimizar)")
+    fig_before = px.imshow(
+        matrix_before,
+        labels={"x": "Destino", "y": "Origen", "color": "Temp. antes"},
+        x=matrix_before.columns,
+        y=matrix_before.index,
+        aspect="auto",
+        color_continuous_scale="RdBu_r",
+        zmin=vmin,
+        zmax=vmax,
+    )
+    fig_before.update_xaxes(tickangle=45)
+    st.plotly_chart(fig_before, use_container_width=True)
+
+    st.markdown("#### 🔳 Heatmap de temperatura por enlace (después de optimizar)")
+    fig_after = px.imshow(
+        matrix_after,
+        labels={"x": "Destino", "y": "Origen", "color": "Temp. después"},
+        x=matrix_after.columns,
+        y=matrix_after.index,
+        aspect="auto",
+        color_continuous_scale="RdBu_r",
+        zmin=vmin,
+        zmax=vmax,
+    )
+    fig_after.update_xaxes(tickangle=45)
+    st.plotly_chart(fig_after, use_container_width=True)
+
+
+def plot_optimization_maps(df_opt: pd.DataFrame, df_geo: pd.DataFrame) -> None:
+    """
+    Dibuja dos mapas con pydeck:
+    - Arcos OD coloreados por temperatura ANTES de optimizar
+    - Arcos OD coloreados por temperatura DESPUÉS de optimizar
+
+    df_geo debe tener columnas: municipio, lat, lon
+    """
+    if df_opt.empty:
+        st.info("No hay enlaces para dibujar en el mapa.")
+        return
+
+    if df_geo is None or df_geo.empty:
+        st.info("No hay datos geoespaciales (df_geo) para construir el mapa.")
+        return
+
+    # Preparamos coordenadas de origen y destino
+    geo_orig = df_geo.rename(
+        columns={"municipio": "origen", "lat": "lat_o", "lon": "lon_o"}
+    )
+    geo_dest = df_geo.rename(
+        columns={"municipio": "destino", "lat": "lat_d", "lon": "lon_d"}
+    )
+
+    edges = (
+        df_opt[["origen", "destino", "demanda", "temp_before", "temp_after", "R_base", "R_opt"]]
+        .merge(geo_orig, on="origen", how="left")
+        .merge(geo_dest, on="destino", how="left")
+    )
+
+    edges = edges.dropna(subset=["lat_o", "lon_o", "lat_d", "lon_d"])
+    if edges.empty:
+        st.info("No se pueden geolocalizar los enlaces (falta lat/lon).")
+        return
+
+    # Color según temperatura
+    def _color_from_temp(t: float):
+        if not np.isfinite(t):
+            # enlaces sin info → gris semitransparente
+            return [200, 200, 200, 80]
+
+        if t < 0.8:
+            # frío → azul
+            return [30, 80, 200, 180]
+        elif t <= 1.2:
+            # equilibrado → blanco
+            return [255, 255, 255, 220]
+        else:
+            # caliente → rojo
+            return [220, 30, 30, 220]
+
+    edges["color_before"] = edges["temp_before"].apply(_color_from_temp)
+    edges["color_after"] = edges["temp_after"].apply(_color_from_temp)
+
+    # Grosor en función de la demanda (log escalado)
+    max_d = edges["demanda"].max()
+    if max_d and max_d > 0:
+        edges["width"] = 1.0 + 4.0 * np.log1p(edges["demanda"]) / np.log1p(max_d)
+    else:
+        edges["width"] = 1.0
+
+    view_state = pdk.ViewState(
+        latitude=41.39,
+        longitude=2.17,
+        zoom=9,
+        pitch=35,
+        bearing=0,
+    )
+
+    tooltip = {
+        "html": (
+            "<b>{origen} → {destino}</b><br/>"
+            "Demanda: {demanda}<br/>"
+            "Temp. antes: {temp_before}<br/>"
+            "Temp. después: {temp_after}"
+        ),
+        "style": {"color": "white"},
+    }
+
+    # --- Mapa antes de optimizar ---
+    st.markdown("#### 🗺️ Mapa de enlaces (temperatura antes de optimizar)")
+    layer_before = pdk.Layer(
+        "ArcLayer",
+        data=edges,
+        get_source_position="[lon_o, lat_o]",
+        get_target_position="[lon_d, lat_d]",
+        get_width="width",
+        get_source_color="color_before",
+        get_target_color="color_before",
+        pickable=True,
+        auto_highlight=True,
+    )
+    st.pydeck_chart(
+        pdk.Deck(
+            layers=[layer_before],
+            initial_view_state=view_state,
+            tooltip=tooltip,
+        )
+    )
+
+    # --- Mapa después de optimizar ---
+    st.markdown("#### 🗺️ Mapa de enlaces (temperatura después de optimizar)")
+    layer_after = pdk.Layer(
+        "ArcLayer",
+        data=edges,
+        get_source_position="[lon_o, lat_o]",
+        get_target_position="[lon_d, lat_d]",
+        get_width="width",
+        get_source_color="color_after",
+        get_target_color="color_after",
+        pickable=True,
+        auto_highlight=True,
+    )
+    st.pydeck_chart(
+        pdk.Deck(
+            layers=[layer_after],
+            initial_view_state=view_state,
+            tooltip=tooltip,
+        )
+    )
