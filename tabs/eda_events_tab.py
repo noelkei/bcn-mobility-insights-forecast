@@ -13,7 +13,6 @@ def render_event_eda(df):
     # ---------------------------------------------------------
     df_working = df.copy()
 
-    # A) FECHA SEGURA
     if "day" in df_working.columns:
         source_col = "day"
     elif "date" in df_working.columns:
@@ -22,7 +21,6 @@ def render_event_eda(df):
         st.error("⚠️ Critical Error: No 'day' or 'date' column found.")
         return
 
-    # Extraer y convertir fecha
     raw_dates = df_working[source_col]
     if isinstance(raw_dates, pd.DataFrame):
         raw_dates = raw_dates.iloc[:, 0]
@@ -34,17 +32,13 @@ def render_event_eda(df):
 
     df_working["date"] = date_series
     df_working = df_working.dropna(subset=["date"])
-
-    # B) RENOMBRADO INTELIGENTE (Buscamos las columnas clave)
     
-    # 1. Asistencia
     att_col = None
     if "event_attendance" in df_working.columns:
         att_col = "event_attendance"
     elif "attendance" in df_working.columns:
         att_col = "attendance"
     
-    # 2. Flag de Evento
     flag_col = None
     if "event_flag" in df_working.columns:
         flag_col = "event_flag"
@@ -53,7 +47,6 @@ def render_event_eda(df):
     elif "event(y/n)" in df_working.columns:
         flag_col = "event(y/n)"
 
-    # Mapeo
     col_map = {
         "event_names": "event",
         "event_category": "event_type",
@@ -66,33 +59,25 @@ def render_event_eda(df):
     rename_dict = {k: v for k, v in col_map.items() if k in df_working.columns}
     df_working = df_working.rename(columns=rename_dict)
 
-    # C) LIMPIEZA Y RELLENO (CRÍTICO)
     
-    # Si no existe attendance, creamos 0
     if "attendance_clean" not in df_working.columns:
         df_working["attendance_clean"] = 0
     else:
         df_working["attendance_clean"] = pd.to_numeric(df_working["attendance_clean"], errors='coerce').fillna(0)
 
-    # Si no existe trips, creamos 0
     if "trips" not in df_working.columns:
         df_working["trips"] = 0
     else:
         df_working["trips"] = pd.to_numeric(df_working["trips"], errors='coerce').fillna(0)
 
-    # D) LÓGICA MAESTRA PARA 'is_event' (Arreglo del vacío)
-    # Si tenemos columna is_event, la limpiamos. Si no, la deducimos.
     if "is_event" in df_working.columns:
-        # Convertimos 'y'/'n' a 1/0 si fuera necesario
         if df_working["is_event"].dtype == 'object':
              df_working["is_event"] = df_working["is_event"].apply(lambda x: 1 if str(x).lower() in ['y', 'yes', '1', 'true'] else 0)
         else:
              df_working["is_event"] = pd.to_numeric(df_working["is_event"], errors='coerce').fillna(0)
     else:
-        # Deducir: Es evento si hay asistencia > 0
         df_working["is_event"] = np.where(df_working["attendance_clean"] > 0, 1, 0)
 
-    # E) LIMPIEZA DE NOMBRES DE EVENTO ("none", "nan")
     if "event" in df_working.columns:
         df_working["event"] = df_working["event"].astype(str).replace({'none': None, 'None': None, 'nan': None, 'NaN': None})
         # Si el evento es nulo pero is_event=1, ponemos "Unknown Event"
@@ -123,20 +108,17 @@ def render_event_eda(df):
     # ---------------------------------------------------------
     # 3. AGGREGATION & METRICS
     # ---------------------------------------------------------
-    # Agrupamos por día
     daily_stats = df_filtered.groupby("date").agg({
         "attendance_clean": "max", # Usamos max porque la asistencia se repite por fila
         "trips": "sum",            
         "is_event": "max"
     }).reset_index()
 
-    # Feature Engineering
     daily_stats["is_weekend"] = daily_stats["date"].dt.dayofweek >= 5
 
     event_days = daily_stats[daily_stats["is_event"] == 1]
     no_event_days = daily_stats[daily_stats["is_event"] == 0]
 
-    # Metrics
     n_event = len(event_days)
     avg_att = event_days["attendance_clean"].mean() if n_event > 0 else 0
     avg_trips_event = event_days["trips"].mean() if n_event > 0 else 0
@@ -144,7 +126,6 @@ def render_event_eda(df):
     n_no_event = len(no_event_days)
     avg_trips_no_event = no_event_days["trips"].mean() if n_no_event > 0 else 0
     
-    # Delta
     delta_trips = 0
     if avg_trips_no_event > 0:
         delta_trips = ((avg_trips_event - avg_trips_no_event) / avg_trips_no_event) * 100
@@ -184,7 +165,6 @@ def render_event_eda(df):
 
     with c_sc:
         st.caption("Correlation: Attendance vs. Trips")
-        # Scatter
         evt_scatter_data = daily_stats[daily_stats["is_event"]==1]
         
         if not evt_scatter_data.empty:
@@ -218,7 +198,7 @@ def render_event_eda(df):
         fig4.update_layout(showlegend=False, height=400, title_text="Variability: Normal vs Event Days")
         st.plotly_chart(fig4, use_container_width=True)
 
-    # INSIGHT 2 (CORREGIDO)
+    # INSIGHT 2
     st.info(
         "**Analysis:** The correlation between attendance and total trips is **weak**. "
         "A key factor is the **audience origin**: events attracting primarily local residents (already in the city) generate fewer *new* inter-city trips. "

@@ -6,14 +6,12 @@ import plotly.graph_objects as go
 
 def render_time_eda(df):
     st.header("⏳ Temporal & Seasonality Analysis")
-    # (Sub-caption removed)
 
     # ---------------------------------------------------------
     # 1. ROBUST DATA PREPARATION
     # ---------------------------------------------------------
     df_working = df.copy()
 
-    # A) Secure Date
     if "day" in df_working.columns:
         source_col = "day"
     elif "date" in df_working.columns:
@@ -22,21 +20,18 @@ def render_time_eda(df):
         st.error("⚠️ Critical Error: No 'day' or 'date' column found.")
         return
 
-    # Extract date
     raw_dates = df_working[source_col]
     if isinstance(raw_dates, pd.DataFrame):
         raw_dates = raw_dates.iloc[:, 0]
     
     date_series = pd.to_datetime(raw_dates, errors='coerce')
 
-    # Clean
     if "date" in df_working.columns:
         df_working = df_working.drop(columns=["date"])
 
     df_working["date"] = date_series
     df_working = df_working.dropna(subset=["date"])
 
-    # B) Normalize trips column
     if "viajes" not in df_working.columns:
         possible_names = ["trips", "total_viajes", "demand"]
         found = False
@@ -49,7 +44,6 @@ def render_time_eda(df):
             st.error("Trips column ('viajes') not found.")
             return
 
-    # Ensure numeric
     df_working["viajes"] = pd.to_numeric(df_working["viajes"], errors='coerce').fillna(0)
 
     # ---------------------------------------------------------
@@ -67,17 +61,14 @@ def render_time_eda(df):
     if len(date_range) != 2: return
     start, end = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
     
-    # FILTERED DATAFRAME (Row Level)
     df_filtered_raw = df_working[(df_working["date"] >= start) & (df_working["date"] <= end)].copy()
 
     if df_filtered_raw.empty:
         st.warning("No data in selected range.")
         return
 
-    # AGGREGATED DATAFRAME (Day Level)
     daily_df = df_filtered_raw.groupby("date")["viajes"].sum().reset_index()
     
-    # Feature Engineering
     daily_df["weekday_name"] = daily_df["date"].dt.day_name()
     daily_df["month_name"] = daily_df["date"].dt.month_name()
     daily_df["month_num"] = daily_df["date"].dt.month
@@ -114,9 +105,7 @@ def render_time_eda(df):
 
     c_chart1, c_chart2 = st.columns(2)
 
-    # A) Weekly Profile
     with c_chart1:
-        # (Sub-caption removed)
         days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         weekly_profile = daily_df.groupby("weekday_name")["viajes"].mean().reindex(days_order)
         
@@ -129,9 +118,7 @@ def render_time_eda(df):
         fig1.update_layout(showlegend=False, height=350, margin=dict(t=30, l=50), title_text="Typical Weekly Profile")
         st.plotly_chart(fig1, use_container_width=True)
 
-    # B) Monthly Profile
     with c_chart2:
-        # (Sub-caption removed)
         monthly_profile = daily_df.groupby(["month_num", "month_name"])["viajes"].mean().reset_index()
         monthly_profile = monthly_profile.sort_values("month_num")
 
@@ -191,7 +178,6 @@ def render_time_eda(df):
     # 6. TOP ORIGIN MUNICIPALITIES
     # ---------------------------------------------------------
     st.subheader("4️⃣ Top Origin Municipalities")
-    # (Sub-caption removed)
 
     if "municipio_origen_name" in df_filtered_raw.columns:
         top_origins = df_filtered_raw.groupby("municipio_origen_name")["viajes"].sum().sort_values(ascending=True).tail(15)
@@ -205,7 +191,6 @@ def render_time_eda(df):
             color=top_origins.values,
             color_continuous_scale="Blues"
         )
-        # FIX: Added margin-left (l=180) to prevent overlap of long names
         fig_ori.update_layout(
             height=500, 
             showlegend=False, 
@@ -230,14 +215,13 @@ def render_time_eda(df):
     # 7. CORRELATION MATRIX
     # ---------------------------------------------------------
     st.subheader("5️⃣ Correlation Matrix (Key Drivers)")
-    # (Sub-caption removed)
 
     target_cols = [
-        "total_viajes_dia", # Global City Mobility
-        "tavg",             # Temperature
-        "prcp",             # Rain
-        "is_weekend",       # Weekend Factor
-        "event_attendance"        # Event Attendance
+        "total_viajes_dia",
+        "tavg",
+        "prcp",
+        "is_weekend",
+        "event_attendance"
     ]
     
     cols_to_corr = [c for c in target_cols if c in df_filtered_raw.columns]

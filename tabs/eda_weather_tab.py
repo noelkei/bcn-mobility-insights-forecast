@@ -131,7 +131,6 @@ def render_weather_eda(df):
 
     with c_chart1:
         st.caption("Correlation: Temp vs Trips")
-        # Scatter Plot con TRENDLINE
         fig1 = px.scatter(
             daily_weather, 
             x="temp_avg", 
@@ -142,7 +141,6 @@ def render_weather_eda(df):
             trendline="ols",  # Añade la línea de tendencia
             labels={"temp_avg": "Avg. Temp (°C)", "trips": "Total Trips"}
         )
-        # Ajuste de Layout para evitar solapamiento
         fig1.update_layout(
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             margin=dict(l=20, r=20, t=30, b=20),
