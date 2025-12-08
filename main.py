@@ -1,7 +1,12 @@
 import streamlit as st
 import pandas as pd
 
-# Tabs
+# Tabs - EDA (Tus pestañas)
+from tabs.eda_tab import render_time_eda
+from tabs.eda_weather_tab import render_weather_eda
+from tabs.eda_events_tab import render_event_eda
+
+# Tabs - Modelo (Pestañas del compañero)
 from tabs.prediccion_viajes import render_prediccion_viajes
 from tabs.explicabilidad_global import render_explicabilidad_global
 from tabs.explicabilidad_local import render_explicabilidad_local
@@ -67,60 +72,58 @@ st.markdown("### Predictive, Explainable & Insight-Driven Inflow Mobility for Ba
 # -------------------------------------------------------------
 # Tabs
 # -------------------------------------------------------------
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "📊 Data Exploration",
-    "📈 Visualizations",
-    "🌍 Heatmap",
-    "🌦️ Weather & Events",
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "⏳ Temporal Analysis",
+    "🌦️ Weather Analysis",
+    "🎟️ Events Analysis",
     "🔮 Prediction",
     "🧠 Global Explainability",
     "🔬 Local Explainability",
 ])
 
 # -------------------------------------------------------------
-# Tab 1 - Data Exploration (placeholder)
+# Tab 1 - Temporal Analysis
 # -------------------------------------------------------------
 with tab1:
-    st.header("📊 Data Exploration")
-    st.info("🚧 This module is under construction.")
+    if df_model_training is not None:
+        render_time_eda(df_model_training)
+    else:
+        st.error("Data not loaded.")
 
 # -------------------------------------------------------------
-# Tab 2 - Visualizations (placeholder)
+# Tab 2 - Weather Analysis
 # -------------------------------------------------------------
 with tab2:
-    st.header("📈 Visualizations")
-    st.info("🚧 This module is under construction.")
+    if df_model_training is not None:
+        render_weather_eda(df_model_training)
+    else:
+        st.error("Data not loaded.")
 
 # -------------------------------------------------------------
-# Tab 3 - Heatmap (placeholder)
+# Tab 3 - Events Analysis
 # -------------------------------------------------------------
 with tab3:
-    st.header("🌍 Heatmap")
-    st.info("🚧 This module is under construction.")
+    if df_model_training is not None:
+        render_event_eda(df_model_training)
+    else:
+        st.error("Data not loaded.")
 
 # -------------------------------------------------------------
-# Tab 4 - Weather & Events (placeholder)
+# Tab 4 — Prediction
 # -------------------------------------------------------------
 with tab4:
-    st.header("🌦️ Weather & Events")
-    st.info("🚧 This module is under construction.")
-
-# -------------------------------------------------------------
-# Tab 5 — Prediction
-# -------------------------------------------------------------
-with tab5:
     render_prediccion_viajes()
 
 # -------------------------------------------------------------
-# Tab 6 — Global Explainability
+# Tab 5 — Global Explainability
 # -------------------------------------------------------------
-with tab6:
+with tab5:
     render_explicabilidad_global()
 
 # -------------------------------------------------------------
-# Tab 7 — Local Explainability
+# Tab 6 — Local Explainability
 # -------------------------------------------------------------
-with tab7:
+with tab6:
     render_explicabilidad_local()
 
 # -------------------------------------------------------------
