@@ -276,7 +276,7 @@ def render_visualizations():
 
     if df is None or geo is None:
         st.error("❌ Global dataframes not found in StateManager.")
-        st.info("Check that main.py loads df_main and df_geo into StateManager('global').")
+        st.info("Check that old_main.py loads df_main and df_geo into StateManager('global').")
         return
 
     # 2) Type safety (only once, df is cached globally)

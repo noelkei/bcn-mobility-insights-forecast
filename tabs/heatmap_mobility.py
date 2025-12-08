@@ -49,7 +49,7 @@ def render_heatmap_mobility():
     
     if df_main is None or df_main.empty:
         st.error("❌ Error: Los datos principales no están cargados.")
-        st.info("Asegúrate de que main.py carga el dataset en el StateManager.")
+        st.info("Asegúrate de que old_main.py carga el dataset en el StateManager.")
         return
     
     # Asegurar tipos de datos
@@ -358,10 +358,10 @@ def render_heatmap_mobility():
 
 
 # ================================================================
-# POINT DE ENTRADA (usado en main.py)
+# POINT DE ENTRADA (usado en old_main.py)
 # ================================================================
 def show():
-    """Entry point for the heatmap tab in main.py"""
+    """Entry point for the heatmap tab in old_main.py"""
     render_heatmap_mobility()
 
 

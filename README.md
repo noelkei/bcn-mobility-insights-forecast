@@ -72,7 +72,7 @@ pip install -r requirements.txt
 Con el entorno virtual **activado** y desde la raíz del proyecto:
 
 ```bash
-streamlit run main.py
+streamlit run old_main.py
 ```
 
 El navegador se abrirá automáticamente en una URL tipo

@@ -15,7 +15,7 @@ from utils.optimizer_utils import (
 
 def _show_results(df_opt: pd.DataFrame, summary: dict):
     """
-    Versión antigua del resumen (no se usa en main.py, pero la dejamos por compatibilidad).
+    Versión antigua del resumen (no se usa en old_main.py, pero la dejamos por compatibilidad).
     """
     if df_opt.empty:
         st.warning("No hay resultados de optimización para mostrar.")
@@ -82,7 +82,7 @@ def _show_results(df_opt: pd.DataFrame, summary: dict):
 
 def show():
     """
-    Versión antigua de la pestaña (no usada actualmente en main.py).
+    Versión antigua de la pestaña (no usada actualmente en old_main.py).
     La mantenemos por si quieres probarla aislada.
     """
     st.header("⚙️ Simulación y Optimización de Movilidad (OD)")
@@ -100,7 +100,7 @@ def show():
 
     if df_main is None or R_max is None or df_share is None or df_hist_od is None:
         st.error("❌ Faltan datos globales para la optimización (df_main / R_max / df_share / df_hist_od).")
-        st.info("Revisa que main.py inicialice correctamente el StateManager global.")
+        st.info("Revisa que old_main.py inicialice correctamente el StateManager global.")
         return
 
     if not pd.api.types.is_datetime64_any_dtype(df_main["day"]):
@@ -367,7 +367,7 @@ def show():
 
 
 # =====================================================================
-# NUEVAS FUNCIONES DE PLOTEO PARA USAR DESDE main.py (Tab 6)
+# NUEVAS FUNCIONES DE PLOTEO PARA USAR DESDE old_main.py (Tab 6)
 # =====================================================================
 
 def plot_optimization_matrices(df_opt: pd.DataFrame) -> None:

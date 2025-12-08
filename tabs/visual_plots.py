@@ -20,7 +20,7 @@ def render_visualizations():
 
     if df is None or geo is None:
         st.error("❌ Error: Los datos globales no están cargados en el StateManager.")
-        st.info("Asegúrate de que main.py ejecuta StateManager y carga los datasets.")
+        st.info("Asegúrate de que old_main.py ejecuta StateManager y carga los datasets.")
         return
 
     # ==========================================================
