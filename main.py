@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
 
-# Tabs - EDA (Tus pestañas)
 from tabs.eda_tab import render_time_eda
 from tabs.eda_weather_tab import render_weather_eda
 from tabs.eda_events_tab import render_event_eda
 
-# Tabs - Modelo (Pestañas del compañero)
 from tabs.prediccion_viajes import render_prediccion_viajes
 from tabs.explicabilidad_global import render_explicabilidad_global
 from tabs.explicabilidad_local import render_explicabilidad_local

@@ -1,328 +1,535 @@
-# 🌐 OPTIMET-BCN — Digital Twin of Barcelona Metropolitan Mobility
+````markdown
+# 🌊 BCN Flow Intelligence
 
-OPTIMET-BCN es una aplicación interactiva en **Streamlit** para explorar, predecir y optimizar
-los flujos diarios de movilidad entre municipios del área metropolitana de Barcelona.
+**BCN Flow Intelligence** is a Streamlit web application for analyzing and forecasting daily inflow mobility to Barcelona from surrounding municipalities.
 
-La app combina:
+The app combines:
 
-- 🚍 **Datos de movilidad** (viajes diarios origen–destino entre municipios)  
-- 🌦️ **Meteorología** y 🎟️ **eventos**  
-- 🤖 Un modelo sencillo de **predicción OD**  
-- 🧮 Un módulo de **optimización de recursos** centrado en Barcelona
+- 🧮 A trained **LightGBM model**  
+- 📊 Rich **visual analytics (EDA)** on time, weather, and events  
+- 🧠 **Explainable AI (SHAP)**, both global and local  
 
-El objetivo es ofrecer una **herramienta de apoyo al análisis y a la decisión**, no un
-planificador operativo en producción.
-
----
-
-## 1. Estructura del proyecto (resumen)
-
-En la raíz del proyecto encontrarás:
-
-- `main.py` – **punto de entrada** de la app de Streamlit
-- Carpeta `tabs/` – una pestaña de la app por archivo  
-  - `data_explorer.py` – exploración básica del dataset  
-  - `visual_plots.py` – visualizaciones generales  
-  - `heatmap_mobility.py` – heatmap / concentración de flujos OD  
-  - `weather_events.py` – impacto del clima y los eventos  
-  - `prediccion_od.py` + `prediccion_od_src.py` – módulo de predicción OD  
-- Carpeta `utils/` – funciones compartidas  
-  - `state_manager.py` – envoltorio ligero sobre `st.session_state`  
-  - `load_data.py`, `geo_utils.py`, `optimizer_utils.py`, `plot_utils.py`, etc.  
-- Carpeta `data/processed/`
-  - `final_combined_2023_2024.csv` – dataset combinado de movilidad + clima + eventos  
-  - `municipios_with_lat_alt.csv` – coordenadas de municipios  
-- Carpeta `models/` – artefactos de ML cacheados (se crean automáticamente al entrenar el modelo)
-- `requirements.txt` – dependencias de Python
-
-Para **usar** la app no es necesario modificar el código; todo se maneja desde la interfaz.
+It is designed as an analyst-friendly “mobility cockpit” to understand:
+- How mobility evolves over time  
+- How weather and events impact demand  
+- Which features drive the model’s predictions  
+- Why specific days behave unusually  
 
 ---
 
-## 2. Instalación
+## 1. Project Structure
 
-### 2.1. Requisitos previos
+The relevant structure (simplified) is:
 
-- Python **3.10 o superior**  
-- `git` (opcional, sólo si clonas el repositorio)  
-- Conexión a internet únicamente para instalar los paquetes
+```text
+.
+├── data/
+│   └── processed/
+│       ├── df_model.csv
+│       ├── df_model_training.csv        # Main modelling & app dataset
+│       ├── events
+│       ├── movilidad_combinada.csv
+│       └── municipios_with_lat_alt.csv
+├── docs/
+│   └── state_manager_guide/
+├── models/
+│   └── lgb_model_final/
+│       ├── model.pkl                    # Trained LightGBM model
+│       └── feature_cols.json            # Ordered feature list used by the model
+├── tabs/
+│   ├── __init__.py
+│   ├── eda_tab.py                       # ⏳ Temporal Analysis
+│   ├── eda_weather_tab.py               # 🌦️ Weather Analysis
+│   ├── eda_events_tab.py                # 🎟️ Events Analysis
+│   ├── prediccion_viajes.py             # 🔮 Prediction
+│   ├── explicabilidad_global.py         # 🧠 Global Explainability
+│   └── explicabilidad_local.py          # 🔬 Local Explainability
+├── utils/
+│   ├── prediccion/
+│   │   ├── feature_engineering.py
+│   │   ├── lag_utils.py
+│   │   ├── model_loader.py
+│   │   └── shap_utils.py
+│   ├── geo_utils.py
+│   ├── load_data.py
+│   └── state_manager.py
+├── main.py                              # Streamlit entrypoint
+├── requirements.txt
+└── eda.ipynb                            # Notebook(s) for exploration / training
+````
 
-### 2.2. Crear entorno virtual
+---
+
+## 2. Installation
+
+### 2.1. Requirements
+
+* Python **3.9+** (3.10 recommended)
+* `pip` or `conda`
+* Basic terminal / command line
+
+### 2.2. Create and activate a virtual environment (recommended)
 
 ```bash
-# 1) Crear entorno virtual
+# From the project root
 python -m venv .venv
+source .venv/bin/activate      # On macOS / Linux
+# or
+.\.venv\Scripts\activate       # On Windows
+```
 
-# 2) Activarlo
-#   En macOS / Linux:
-source .venv/bin/activate
-#   En Windows (PowerShell):
-# .venv\Scripts\Activate.ps1
-#   En Windows (cmd):
-# .venv\Scripts\activate.bat
+### 2.3. Install dependencies
 
-# 3) Instalar dependencias
+```bash
 pip install -r requirements.txt
 ```
 
+Key libraries include:
+
+* `streamlit`
+* `pandas`, `numpy`
+* `plotly`
+* `lightgbm`
+* `scikit-learn`
+* `shap`
+
 ---
 
-## 3. Cómo ejecutar la app
+## 3. Running the App
 
-Con el entorno virtual **activado** y desde la raíz del proyecto:
+From the project root, with the virtual environment activated:
 
 ```bash
-streamlit run old_main.py
+streamlit run main.py
 ```
 
-El navegador se abrirá automáticamente en una URL tipo
-`http://localhost:8501`.
+Then open the local URL printed in the terminal (usually `http://localhost:8501`) in your browser.
 
-### 3.1. Tiempo de carga inicial
-
-En el primer arranque es normal ver *spinners* de carga durante varios segundos:
-
-* Se carga en memoria el dataset `final_combined_2023_2024.csv`.
-* Se carga (o entrena, si aún no existe) un pequeño modelo de **Random Forest** para la predicción OD.
-* El módulo de optimización calcula estadísticas agregadas para los enlaces que implican a **Barcelona**.
-
-Las ejecuciones posteriores son más rápidas gracias al cacheo de datos y modelos.
+> ⚠️ The app assumes that `data/processed/df_model_training.csv` and
+> `models/lgb_model_final/model.pkl` exist and are consistent with each other.
+> These are loaded automatically at startup.
 
 ---
 
-## 4. Datos utilizados
+## 4. Data Expectations
 
-La aplicación trabaja con flujos diarios de movilidad enriquecidos con contexto:
+The central dataset is:
 
-* `day` y atributos de calendario (mes, día de la semana, etc.)
-* `municipio_origen_name`, `municipio_destino_name`
-* `viajes` – número de viajes para ese par OD y día
-* Variables meteorológicas (`tavg`, `tmin`, `tmax`, `prcp`)
-* Indicadores de eventos y asistencia (`event(y/n)`, `name`, `attendance`, etc.)
+`data/processed/df_model_training.csv`
 
-Para los mapas se usa `data/processed/municipios_with_lat_alt.csv`,
-que contiene las coordenadas de los municipios.
+It must contain at least:
 
-Mientras mantengas la estructura original de carpetas, no necesitas tocar estos archivos.
+* **Time & ID columns**
 
----
+  * `date` (or `day`) – daily resolution
+  * `municipio_origen_name` – origin municipality (categorical)
+  * `origen` encoded as dummies:
 
-## 5. Uso de la app — pestaña a pestaña
+    * `origen_Internacional`, `origen_Nacional`,
+    * `origen_Regional`, `origen_Residente`
 
-La interfaz principal está organizada en **seis pestañas**.
+* **Target**
 
-### 5.1. Pestaña 1 – 📊 Exploración de Datos
+  * `viajes` – trips from origin municipality to Barcelona for that day
 
-**Objetivo:** revisar rápidamente el estado del dataset combinado.
+* **Calendar features**
 
-Qué permite hacer:
+  * `month`, `dow`, `is_weekend`, `dow_sin`, `dow_cos`, `month_sin`, `month_cos`
 
-* Ver una **vista previa** de las primeras filas del dataset.
-* Consultar **KPIs básicos**:
+* **Weather**
 
-  * número de registros y columnas
-  * rango temporal cubierto (`day` mínimo y máximo)
-* Explorar **histogramas**:
+  * `tavg`, `tmin`, `tmax`, `prcp`
 
-  * viajes totales por día
-  * viajes totales por día de la semana
-* Ver una lista automática de **días atípicos** (muy alta o muy baja movilidad).
-* Inspeccionar una muestra de registros con `viajes = 0`.
+* **Events**
 
-Es la pestaña ideal para entender “qué hay en los datos” antes de entrar en vistas más específicas.
+  * `event_attendance`
+  * Category flags:
 
----
+    * `eventcat_city_festival`, `eventcat_concert`, `eventcat_festival`,
+    * `eventcat_football`, `eventcat_motorsport`,
+    * `eventcat_other_sport`, `eventcat_trade_fair`
 
-### 5.2. Pestaña 2 – 📈 Visualizaciones
+* **Lags**
 
-**Objetivo:** explorar patrones de movilidad desde el punto de vista de un
-**municipio origen**.
+  * Global:  `total_viajes_dia_lag1` … `total_viajes_dia_lag7`
+  * Local:   `viajes_lag1` … `viajes_lag7`
 
-Controles principales:
-
-* Selector de **municipio origen** (por defecto: Barcelona).
-* Selector de **tipo de origen** (agrupación según la fuente / tipo de dato).
-
-Salidas visuales:
-
-* 🗺️ **Mini-mapa de destinos** (mapa de burbujas):
-  cada círculo es un municipio destino, con tamaño proporcional al número de viajes.
-* 📈 **Serie temporal diaria** de viajes totales desde el origen seleccionado.
-* 📅 **Promedio de viajes por día de la semana** (gráfico de barras).
-* 🏷️ **Desglose por tipo de origen** a lo largo del tiempo (área apilada).
-* 🏆 **Top 10 municipios destino** (tabla + gráfico de barras).
-* 🔄 **Movilidad intra vs inter-municipal** (gráfico de tarta).
-
-Ejemplos de preguntas que ayuda a responder:
-
-> “Desde Barcelona, ¿a qué municipios se viaja más y cómo cambia a lo largo de la semana?”
+Other CSVs in `data/processed/` are used for exploration and geographic enrichment.
 
 ---
 
-### 5.3. Pestaña 3 – 🌍 Heatmap
+## 5. How the App Works
 
-**Objetivo:** analizar la matriz OD completa y estudiar la concentración de los flujos.
+### 5.1. Global State
 
-Elementos clave:
+The app uses a simple state manager (`utils/state_manager.py`) to share data and objects between tabs:
 
-* Selector de **rango de fechas** y **municipio foco** (por defecto Barcelona).
-* **Heatmap** de la matriz OD agregada en el periodo seleccionado
-  (intensidad de color = volumen de viajes).
-* **Top flujos OD** ordenados por número de viajes.
-* Distribuciones de **origen** y **destino**:
-  cuánta movilidad genera y recibe cada municipio.
-* Vista de **concentración / Pareto**:
+* Global state (`StateManager("global")`) stores:
 
-  * cuántos enlaces explican el 80 % de los viajes
-  * qué porcentaje del total de enlaces representan.
+  * `df_model_training` – main modelling dataset
+  * `df_geo` – municipalities with lat/long/altitude (when needed)
+* Tab-specific state is used to remember user choices (e.g., last prediction).
 
-También puedes **exportar a CSV** los agregados OD de esta pestaña para usarlos fuera de la app.
+You do not need to configure this manually; it is wired in `main.py`.
 
 ---
 
-### 5.4. Pestaña 4 – 🌦️ Clima y Eventos
+## 6. Tabs Overview & Usage
 
-**Objetivo:** entender cómo se relacionan la meteorología y los eventos con la movilidad.
+### 6.1. ⏳ Temporal Analysis (`tabs/eda_tab.py`)
 
-Funciones:
+**Goal:** Understand structural temporal patterns and seasonality in total mobility.
 
-* Seleccionar un **rango de fechas** que se aplica a todas las visualizaciones de la pestaña.
-* Ver indicadores diarios agregados:
+**Main components:**
 
-  * viajes totales
-  * temperatura media, mínima y máxima
-  * precipitación
-  * si hubo al menos un evento
-  * asistencia total a eventos
-* Visualizar:
+1. **Date range filter**
 
-  * series temporales de movilidad frente a temperatura o lluvia
-  * comparativas entre **días con evento** y **días sin evento**
-  * dispersión (*scatterplots*) entre movilidad y variables meteorológicas
+   * Widget: `Filter date range`
+   * Filters the analysis to a subset of days.
 
-Es una vista de **contexto** para interpretar picos o caídas de movilidad
-como posibles efectos de lluvia, olas de calor o grandes eventos.
+2. **Workdays vs Weekends**
 
----
+   * KPIs: average trips on workdays vs weekends.
+   * Interpretation text explaining weekday “capacity load” vs weekend “base load”.
 
-### 5.5. Pestaña 5 – 🔮 Predicción
+3. **Seasonality charts**
 
-**Objetivo:** obtener una predicción sencilla de viajes entre un par
-**origen–destino** para una fecha futura.
+   * Weekly average profile: bar chart by weekday.
+   * Monthly average profile: line chart over month names.
+   * Explains commute-driven peaks and seasonal holiday effects.
 
-Flujo de uso:
+4. **Trend & Smoothing**
 
-1. Selecciona **municipio origen** y **municipio destino**.
-2. Indica una **fecha futura**.
-3. La app muestra la **serie histórica** de viajes para ese par OD y un resumen
-   estadístico (mínimo, media, máximo).
-4. Pulsa **“Predecir viajes”** para obtener una estimación del número de viajes
-   en la fecha elegida (modelo Random Forest entrenado con 2023–2024).
-5. La app interpreta automáticamente si la predicción está por debajo,
-   en línea o por encima de la media histórica.
+   * Daily trips + 7-day rolling average.
+   * Shows underlying trend beyond weekly noise.
 
-Este módulo está pensado como herramienta de **exploración de escenarios**,
-no como un sistema de predicción operativo.
+5. **Top Origin Municipalities**
 
----
+   * Horizontal bar chart of top municipalities by total trips (filtered range).
+   * Insight text about main feeder corridors.
 
-### 5.6. Pestaña 6 – ⚙️ Optimización (foco: Barcelona)
+6. **Correlation Matrix**
 
-**Objetivo:** redistribuir una cantidad fija de **recursos** entre enlaces OD que
-implican a **Barcelona** (como origen o destino) para reducir la saturación
-en los enlaces más calientes.
+   * Heatmap of correlations between:
 
-Conceptos básicos:
+     * `total_viajes_dia`, `tavg`, `prcp`, `is_weekend`, `event_attendance`
+   * Helps quantify relationships between macro-drivers.
 
-* **Demanda**: número de viajes en un día concreto para un enlace OD.
-* **Recursos**: capacidad asignada al enlace (vehículos, oferta, etc.),
-  proporcional al peso histórico del enlace.
-* **Temperatura** = `demanda / recursos`
+7. **Final conclusion**
 
-  * ≈ 1 → enlace equilibrado
-  * > 1 → enlace caliente / saturado
-  * < 1 → enlace frío / infrautilizado
-* **R_max**: capacidad total correspondiente al día de máxima demanda
-  en el histórico (solo enlaces relacionados con Barcelona).
-
-Flujo de trabajo:
-
-1. **Elegir fecha del escenario**
-
-   * Si la fecha existe en el dataset:
-     la demanda por enlace es la **observada** ese día y **no es editable**.
-   * Si la fecha no existe:
-     la app calcula, para cada enlace, una **media ponderada histórica**
-     y **permite editar** la demanda manualmente.
-
-2. **Revisar / editar la tabla de enlaces**
-
-   * Cada fila representa un enlace OD con Barcelona como origen o destino.
-   * Puedes ajustar la columna **Demanda** (cuando es editable) para construir
-     escenarios hipotéticos.
-
-3. **Configurar la optimización**
-
-   * Decidir si el optimizador puede tomar capacidad extra de enlaces muy fríos
-     como **último recurso** (lo que puede calentar ligeramente esos enlaces).
-
-4. **Lanzar la optimización**
-
-   * Pulsa **“🚀 Optimizar recursos para este escenario”**.
-   * El algoritmo:
-
-     * Usa todo el **slack seguro** (capacidad ociosa que no hace falta para
-       mantener temperatura ≤ 1) para enfriar los enlaces más calientes.
-     * Si se permite, realiza una segunda redistribución más agresiva obteniendo
-       capacidad adicional de enlaces muy fríos.
-
-5. **Interpretar resultados**
-
-   * Demanda total del escenario.
-   * Uso de recursos antes y después como % de `R_max`.
-   * Temperatura media antes / después.
-   * Índice de calor que penaliza especialmente los enlaces muy calientes.
-   * Número de enlaces calientes (temperatura > 1) antes y después.
-   * Slack (capacidad no utilizada) antes y después, en unidades y en %.
-   * Para los 10 enlaces más calientes antes de optimizar:
-     cuánto han aumentado sus recursos en valor absoluto y en porcentaje.
-
-   Debajo se muestran tablas con el detalle enlace a enlace:
-   **Demanda**, **Recursos base**, **Recursos optimizados**,
-   **Temperatura antes**, **Temperatura después**, etc.
-
-Esta pestaña funciona como un laboratorio de **“what-if”** para simular cómo
-cambiaría la saturación de los enlaces OD que involucran a Barcelona
-si se redistribuyera la oferta.
+   * Narrative summarizing temporal/seasonal drivers.
 
 ---
 
-## 6. Rendimiento y tiempos de espera
+### 6.2. 🌦️ Weather Analysis (`tabs/eda_weather_tab.py`)
 
-* La carga del dataset combinado y el cálculo de agregados es relativamente pesado,
-  por lo que es normal un **pequeño retraso** al iniciar la app.
-* El modelo de predicción OD se guarda en disco y se reutiliza; la primera
-  predicción puede tardar algo más, las siguientes son rápidas.
-* El módulo de optimización trabaja únicamente con enlaces que incluyen
-  Barcelona para mantener la interfaz fluida y utiliza el `StateManager`
-  para reutilizar resultados intermedios.
+**Goal:** Quantify how weather (temperature, rain) interacts with mobility demand.
+
+**Workflow:**
+
+1. **Date range filter**
+
+   * Same logic: restrict analysis period.
+
+2. **Rain impact KPIs**
+
+   * Average trips on dry vs rainy days.
+   * Delta (%) showing how much mobility changes with rain.
+
+3. **Scatter + Boxplots**
+
+   * Scatter: `Temp vs Trips` with trendline; color by “Dry Day” vs “Rainy Day”.
+   * Boxplot: distribution of trips for dry vs rainy days.
+   * Insight about structural vs weather-sensitive demand.
+
+4. **Temperature & Rain timeline**
+
+   * Dual-axis time series:
+
+     * Line: temperature
+     * Bars: rain
+   * Shows meteorological context over time.
+
+5. **Resilience Matrix**
+
+   * Grouped bar chart:
+
+     * Axis: Workday vs Weekend
+     * Colors: Dry vs Rainy
+   * Captures interaction effect between calendar and rain.
+
+6. **Rain intensity thresholds**
+
+   * Categories: No Rain, Drizzle, Moderate, Heavy.
+   * Bars: average trips at each intensity, with `n` days.
+   * Identifies the precipitation level where mobility really drops.
+
+7. **Final conclusion**
+
+   * Narrative on system resilience and operational thresholds.
 
 ---
 
-## 7. Problemas frecuentes
+### 6.3. 🎟️ Events Analysis (`tabs/eda_events_tab.py`)
 
-* **La app no arranca o aparece un error de importación**
-  Asegúrate de ejecutar `streamlit run main.py` desde la **carpeta raíz del proyecto**
-  y con el entorno virtual **activado**.
+**Goal:** Analyze how large events influence daily demand.
 
-* **Mensaje tipo “Global dataset is not loaded in StateManager('global')”**
-  Comprueba que el archivo `data/processed/final_combined_2023_2024.csv`
-  existe y no ha sido movido o renombrado.
+**Key steps:**
 
-* **La pestaña de Predicción tarda mucho la primera vez**
-  Es normal: se prepara el dataset OD y se entrena (o carga) el modelo.
-  Las ejecuciones posteriores son más rápidas.
+1. **Robust event cleaning**
 
-* **La pestaña de Optimización muestra un error sobre datos faltantes**
-  Reinicia la app desde la terminal y espera a que desaparezca el mensaje
-  *“Inicializando modelo de optimización (foco: Barcelona)”*.
+   * Normalizes columns:
+
+     * `attendance_clean`, `is_event`, `event`, `trips`
+   * If `is_event` is missing, it is inferred from attendance > 0.
+   * Handles missing event names with “Unknown Event”.
+
+2. **Date range filter**
+
+   * Widget: `Filter date range`.
+   * Filters for analysis and aggregation.
+
+3. **Average metrics comparison**
+
+   * KPIs for event days vs non-event days:
+
+     * Number of days
+     * Average attendance
+     * Average trips
+   * Delta (%) showing uplift or reduction on event days.
+
+4. **Impact analysis**
+
+   * Scatter: attendance vs trips for event days with trendline.
+   * Boxplot: distribution of trips for event vs normal days.
+   * Insight about weak/strong coupling between attendance and total city trips.
+
+5. **Timeline: Mobility & Event spikes**
+
+   * Dual-axis chart:
+
+     * Line: total trips
+     * Bars: event attendance
+   * Visually shows how events are scheduled relative to baseline demand.
+
+6. **Final conclusion**
+
+   * Narrative on event-driven shocks and variance vs volume.
+
+---
+
+### 6.4. 🔮 Prediction (`tabs/prediccion_viajes.py`)
+
+**Goal:** Forecast daily trips from a chosen origin municipality and origin type to Barcelona, with scenario control for date, weather, events and lags.
+
+**Usage:**
+
+1. **Select municipality and origin type**
+
+   * `Municipio de origen` (origin municipality)
+   * `Tipo de origen` (Internacional, Nacional, Regional, Residente)
+
+2. **Choose prediction date**
+
+   * `Fecha` between:
+
+     * First date in dataset
+     * Up to 1 year after the last historical date
+   * The app automatically:
+
+     * Computes lags using `compute_auto_lags`
+     * Uses historical means when lags are not available (e.g., far future)
+
+3. **Weather configuration**
+
+   * If the date is inside the dataset:
+
+     * `tavg`, `tmin`, `tmax`, `prcp` are **auto-loaded** from history and locked (read-only).
+   * If outside:
+
+     * Fields become editable, with stored defaults in tab state.
+
+4. **Events configuration**
+
+   * If inside dataset:
+
+     * Event categories and `event_attendance` are read from history and locked.
+   * If outside:
+
+     * You choose:
+
+       * Categories (multiselect)
+       * Total attendance (numeric input, default 0)
+   * Internally converted to feature columns (`eventcat_*` + `event_attendance`).
+
+5. **Lags**
+
+   * Two expandable sections:
+
+     * 🌍 Global lags `total_viajes_dia_lag1–7`
+     * 🏙️ Municipality→Barcelona lags `viajes_lag1–7`
+   * For each lag:
+
+     * If historical value exists → shown as **disabled** input (not editable).
+     * Otherwise → filled with a fallback mean:
+
+       * Global mean trips or municipality-specific mean
+       * You may edit it manually (what-if scenario).
+
+6. **Prediction output**
+
+   * Button: **“Calcular predicción”** / “Calculate prediction”.
+   * Shows:
+
+     * Predicted trips (clipped at 0)
+     * Historical trips for that link & date, if available
+     * Absolute and relative error when real value exists
+   * Distribution panel:
+
+     * Plotly histogram of historical trips for that municipality+origin
+     * Vertical lines for real vs predicted values
+     * Percentile metrics for both.
+
+7. **Connection to Local Explainability**
+
+   * After prediction:
+
+     * The scenario (inputs + outputs) is stored in `StateManager("prediction")` as `latest_prediction`.
+     * The local XAI tab can use this as “Last prediction” to generate SHAP explanations.
+
+---
+
+### 6.5. 🧠 Global Explainability (`tabs/explicabilidad_global.py`)
+
+**Goal:** Understand which features generally drive the LightGBM model.
+
+**What it does:**
+
+1. Loads:
+
+   * Global dataset (`df_model_training`)
+   * Trained model (`models/lgb_model_final/model.pkl`)
+   * Feature list (`feature_cols.json`)
+
+2. Samples up to 4,000 rows for SHAP to keep plots responsive.
+
+3. Computes global SHAP values with `TreeExplainer`.
+
+4. Plots (matplotlib, dark theme):
+
+   * **Bar summary plot**:
+
+     * Mean |SHAP| per feature → global importance ranking
+   * **Beeswarm summary plot**:
+
+     * Distribution of SHAP values for each feature
+     * Color encodes feature value (low → blue, high → red)
+
+5. Automated interpretation:
+
+   * Computes mean absolute SHAP values.
+   * Dynamically identifies:
+
+     * Most influential feature
+     * Least influential feature
+     * Average sensitivity
+   * Writes a narrative explaining:
+
+     * Which feature the model relies on most
+     * Which ones are nearly irrelevant
+     * How to read SHAP magnitudes and directions.
+
+You get both **visual** and **textual** global explanations without manual analysis.
+
+---
+
+### 6.6. 🔬 Local Explainability (`tabs/explicabilidad_local.py`)
+
+**Goal:** Explain a single prediction in detail — why the model predicted that value.
+
+**Options to choose the observation:**
+
+1. **Last prediction**
+
+   * Uses the scenario stored from the Prediction tab.
+   * Shows:
+
+     * Date, municipality, origin type
+     * Predicted and (if available) real value
+
+2. **Random test example**
+
+   * Splits data into train/test (time-based).
+   * Samples one row from the test set.
+   * Computes prediction and shows real value.
+
+**Outputs:**
+
+* Full feature row shown as a table.
+* **SHAP waterfall plot**:
+
+  * Starting from the model’s base value (average prediction)
+  * Adds positive (red) and negative (blue) contributions feature by feature
+  * Ends at the final prediction.
+* Detailed **dynamic text explanation**:
+
+  * Which features push the prediction up or down the most
+  * How large those contributions are
+  * How the sum of contributions matches the final prediction.
+
+This tab answers: **“Why did the model predict this number for this day and origin?”**
+
+---
+
+## 7. Retraining / Experimentation (Optional)
+
+Outside the app, notebooks like `eda.ipynb` and utilities in `utils/prediccion/` can be used to:
+
+* Perform new random searches over LightGBM hyperparameters.
+* Re-train models using the 75/15/10 train/val/test split.
+* Save new models to `models/` and update `feature_cols.json`.
+
+If you train a new model and want the app to use it:
+
+1. Overwrite `models/lgb_model_final/model.pkl` with the new model.
+2. Overwrite `models/lgb_model_final/feature_cols.json` with the corresponding feature list.
+3. Restart Streamlit.
+
+---
+
+## 8. Troubleshooting
+
+* **App says “Data not loaded”**
+
+  * Check that `data/processed/df_model_training.csv` exists and has the correct columns.
+  * Ensure `load_data.py` path (`processed/df_model_training.csv`) matches your folder.
+
+* **Model loading error**
+
+  * Check that `models/lgb_model_final/model.pkl` and `feature_cols.json` exist.
+  * They must belong to the same training run (same feature ordering).
+
+* **SHAP plots look broken / too slow**
+
+  * Reduce the sample size in `explicabilidad_global.py`.
+  * Ensure `shap` and `matplotlib` versions are consistent with `requirements.txt`.
+
+---
+
+## 9. License / Credits
+
+This project was built as a final project for a **Visual Analytics** course, integrating:
+
+* ✅ Streamlit web app
+* ✅ Machine Learning model (LightGBM)
+* ✅ Explainable AI with SHAP
+
+**BCN Flow Intelligence** is a student project and not an official product.
+Use it as a learning tool or starting point for more advanced mobility analytics.
+
+---
+
+If you need the README in Spanish as well, it can easily be translated and added as a second section (`README_ES.md`).
+
+```
+```
