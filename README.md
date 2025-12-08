@@ -527,9 +527,3 @@ This project was built as a final project for a **Visual Analytics** course, int
 **BCN Flow Intelligence** is a student project and not an official product.
 Use it as a learning tool or starting point for more advanced mobility analytics.
 
----
-
-If you need the README in Spanish as well, it can easily be translated and added as a second section (`README_ES.md`).
-
-```
-```
