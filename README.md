@@ -1,4 +1,4 @@
-````markdown
+
 # 🌊 BCN Flow Intelligence
 
 **BCN Flow Intelligence** is a Streamlit web application for analyzing and forecasting daily inflow mobility to Barcelona from surrounding municipalities.
