@@ -16,8 +16,8 @@ from utils.geo_utils import get_geo_data
 # Page setup
 # -------------------------------------------------------------
 st.set_page_config(
-    page_title="OPTIMET-BCN",
-    page_icon="🌐",
+    page_title="BCN Flow Intelligence",
+    page_icon="🌊",   # New logo for the project
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -61,8 +61,8 @@ if df_geo is None:
 # -------------------------------------------------------------
 # Header
 # -------------------------------------------------------------
-st.title("🌐 OPTIMET-BCN")
-st.markdown("### Digital Twin of Barcelona Metropolitan Mobility")
+st.title("🌊 BCN Flow Intelligence")
+st.markdown("### Predictive, Explainable & Insight-Driven Inflow Mobility for Barcelona")
 
 # -------------------------------------------------------------
 # Tabs
@@ -127,4 +127,4 @@ with tab7:
 # Footer
 # -------------------------------------------------------------
 st.markdown("---")
-st.caption("© 2025 OPTIMET-BCN | Telefónica Tech")
+st.caption("© 2025 BCN Flow Intelligence")

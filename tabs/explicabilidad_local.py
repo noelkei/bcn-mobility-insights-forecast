@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import shap
 import matplotlib.pyplot as plt
 
@@ -9,142 +10,254 @@ from utils.prediccion.shap_utils import get_shap_explainer, compute_local_shap
 
 
 # ============================================================
-# Global dark theme
+# Custom DARK Theme (NOT pure black)
 # ============================================================
-plt.style.use("dark_background")
 
+DARK_BG = "#1A1A1A"         # softer dark grey
+LIGHT_TEXT = "#EEEEEE"      # near-white
+MID_TEXT = "#CCCCCC"        # medium gray
+
+plt.rcParams.update({
+    "figure.facecolor": DARK_BG,
+    "axes.facecolor": DARK_BG,
+    "savefig.facecolor": DARK_BG,
+    "axes.labelcolor": LIGHT_TEXT,
+    "xtick.color": MID_TEXT,
+    "ytick.color": MID_TEXT,
+    "text.color": LIGHT_TEXT,
+})
+
+
+# ============================================================
+# Fix SHAP plots for dark mode
+# ============================================================
+
+def fix_shap_plot_dark(ax):
+    if ax is None:
+        return
+    ax.set_facecolor(DARK_BG)
+    ax.tick_params(colors=MID_TEXT, labelcolor=MID_TEXT)
+    if ax.xaxis.label: ax.xaxis.label.set_color(LIGHT_TEXT)
+    if ax.yaxis.label: ax.yaxis.label.set_color(LIGHT_TEXT)
+    if ax.title: ax.title.set_color(LIGHT_TEXT)
+
+    for spine in ax.spines.values():
+        spine.set_color(MID_TEXT)
+
+    for txt in ax.get_yticklabels():
+        txt.set_color(LIGHT_TEXT)
+        txt.set_fontsize(11)
+    for txt in ax.get_xticklabels():
+        txt.set_color(MID_TEXT)
+        txt.set_fontsize(10)
+
+
+# ============================================================
+# MAIN LOCAL EXPLAINABILITY TAB
+# ============================================================
 
 def render_explicabilidad_local():
-    st.header("🔬 Local Explainability")
+    st.header("🧠 Local Explainability")
 
-    global_state = StateManager("global")
-    pred_state = StateManager("prediction")
-    tab_state = StateManager("explain_local")
-
-    tab_state.init({
-        "mode": "Last prediction"
-    })
-
+    # -------------------------
     # Load dataset
+    # -------------------------
+    global_state = StateManager("global")
     df_model = global_state.get("df_model_training")
+
     if df_model is None:
-        st.error("❌ df_model_training missing in global state.")
+        st.error("❌ df_model_training not found in global state.")
         return
 
-    df_sorted = df_model.sort_values("date")
+    if not pd.api.types.is_datetime64_any_dtype(df_model["date"]):
+        df_model["date"] = pd.to_datetime(df_model["date"], errors="coerce")
 
-    # Load model
+    if "municipio_origen_name" in df_model.columns:
+        if df_model["municipio_origen_name"].dtype != "category":
+            df_model["municipio_origen_name"] = df_model["municipio_origen_name"].astype("category")
+
+    # -------------------------
+    # Load model + features
+    # -------------------------
     try:
         model = load_lgb_model()
         feature_cols = load_feature_cols()
     except Exception as e:
-        st.error(f"Error loading model or feature columns: {e}")
+        st.error(f"Unable to load model or feature columns: {e}")
         return
 
-    # SHAP explainer
-    explainer = get_shap_explainer(model)
+    df_sorted = df_model.sort_values("date")
 
-    # ============================================================
-    # MODE SELECTION
-    # ============================================================
-    mode = st.radio(
-        "Select example to explain:",
-        ["Last prediction", "Random test example"],
-        horizontal=True
-    )
-
-    tab_state.set("mode", mode)
-
-    # ============================================================
-    # Build train-test split
-    # ============================================================
+    # Same train/test split as training
     test_size = int(len(df_sorted) * 0.20)
     df_test = df_sorted.iloc[-test_size:]
     X_test = df_test[feature_cols].copy()
 
-    x_row = None
+    # -------------------------
+    # Choose observation
+    # -------------------------
+    tab_state = StateManager("explicabilidad_local")
+    tab_state.init({"local_mode": "Last prediction"})
 
-    # ============================================================
-    # MODE 1 — LAST PREDICTION
-    # ============================================================
-    if mode == "Last prediction":
-        last_pred = pred_state.get("latest_prediction", None)
+    st.subheader("🔍 Select the observation to explain")
 
-        if last_pred is None:
-            st.warning("No stored prediction. Go to the Prediction tab first.")
+    local_mode = st.radio(
+        "Example to explain:",
+        ["Last prediction", "Random test example"],
+        index=0 if tab_state.get("local_mode") == "Last prediction" else 1,
+        horizontal=True,
+    )
+    tab_state.set("local_mode", local_mode)
+
+    x_to_explain = None
+    meta = {}
+
+    if local_mode == "Last prediction":
+        pred_state = StateManager("prediction")
+        latest = pred_state.get("latest_prediction")
+
+        if latest is None:
+            st.warning("No last prediction found — please run a prediction first.")
             return
 
         st.info(
-            f"📌 Using last prediction\n"
-            f"- Date: **{last_pred['date']}**\n"
-            f"- Municipality: **{last_pred['municipio']}**\n"
-            f"- Origin: **{last_pred['origen']}**\n"
-            f"- Predicted trips: **{last_pred['y_pred']:.0f}**"
+            f"Using last prediction:\n"
+            f"- Date: **{latest['date']}**\n"
+            f"- Municipality: **{latest['municipio']}**\n"
+            f"- Origin: **{latest['origen']}**\n"
+            f"- Predicted trips: **{latest['y_pred']:.0f}**"
         )
 
-        feat_dict = last_pred["features"]
-        x_row = pd.DataFrame([feat_dict])[feature_cols]
+        x_to_explain = pd.DataFrame([latest["features"]])[feature_cols]
 
-        # fix categorical
-        if "municipio_origen_name" in x_row.columns:
-            cats = df_model["municipio_origen_name"].astype("category").cat.categories
-            x_row["municipio_origen_name"] = pd.Categorical(
-                x_row["municipio_origen_name"],
-                categories=cats
+        if "municipio_origen_name" in x_to_explain:
+            cats = df_model["municipio_origen_name"].cat.categories
+            x_to_explain["municipio_origen_name"] = pd.Categorical(
+                x_to_explain["municipio_origen_name"], categories=cats
             )
 
-    # ============================================================
-    # MODE 2 — RANDOM TEST SAMPLE
-    # ============================================================
-    else:
-        row = X_test.sample(1)
-        idx = row.index[0]
+        meta = latest
 
-        row_full = df_test.loc[idx]
-        y_real = row_full["viajes"]
-        y_pred = max(float(model.predict(row)[0]), 0.0)
+    else:
+        if X_test.empty:
+            st.error("Test set empty — cannot sample.")
+            return
+
+        x_to_explain = X_test.sample(1, random_state=123)
+        row = df_test.loc[x_to_explain.index[0]]
+
+        y_pred_raw = float(model.predict(x_to_explain)[0])
+        y_pred = max(y_pred_raw, 0)
 
         st.info(
-            f"📌 Random test sample\n"
-            f"- Date: **{row_full['date'].date()}**\n"
-            f"- Municipality: **{row_full['municipio_origen_name']}**\n"
-            f"- Origin: **{row_full['origen']}**\n"
-            f"- Real trips: **{y_real:.0f}**\n"
+            f"Random test example:\n\n"
+            f"- Date: **{row['date'].date()}**\n"
+            f"- Municipality: **{row['municipio_origen_name']}**\n"
+            f"- Origin: **{row['origen']}**\n"
+            f"- Actual trips: **{row['viajes']:.0f}**\n"
             f"- Predicted trips: **{y_pred:.0f}**"
         )
 
-        x_row = row
+        meta = {
+            "date": str(row["date"].date()),
+            "municipio": row["municipio_origen_name"],
+            "origen": row["origen"],
+            "y_real": float(row["viajes"]),
+            "y_pred": y_pred,
+        }
 
-    # ============================================================
-    # SHAP LOCAL PLOT
-    # ============================================================
-    with st.spinner("Computing local SHAP values..."):
-        shap_local = compute_local_shap(explainer, x_row)
+    # -------------------------
+    # Compute SHAP values
+    # -------------------------
+    with st.spinner("Computing SHAP values…"):
+        explainer = get_shap_explainer(model)
+        shap_local = compute_local_shap(explainer, x_to_explain)
 
-    st.markdown("### Input features")
-    st.dataframe(x_row, use_container_width=True)
+    shap_values = shap_local[0]
+    features = x_to_explain.columns.tolist()
 
-    st.markdown("### SHAP Waterfall Plot")
+    base_value = float(np.array(explainer.expected_value).reshape(-1)[0])
+    total_contrib = float(shap_values.sum())
+    raw_prediction = base_value + total_contrib
+    clipped_prediction = max(raw_prediction, 0.0)
 
-    values = shap_local[0]
-    base = explainer.expected_value
-    features = x_row.iloc[0]
+    # -------------------------
+    # Show input features
+    # -------------------------
+    st.subheader("📥 Feature values for this observation")
+    st.dataframe(x_to_explain, use_container_width=True)
 
-    explanation = shap.Explanation(
-        values=values,
-        base_values=base,
-        data=features.values,
-        feature_names=list(features.index)
+    # -------------------------
+    # Waterfall plot (Matplotlib)
+    # -------------------------
+    st.subheader("📉 SHAP Waterfall Plot")
+
+    exp = shap.Explanation(
+        values=shap_values,
+        base_values=base_value,
+        data=x_to_explain.iloc[0].values,
+        feature_names=features,
     )
 
-    fig = plt.figure(figsize=(14, 7))
-    shap.waterfall_plot(explanation, show=False)
-    st.pyplot(fig)
+    fig = plt.figure(figsize=(7, 5), facecolor=DARK_BG)
+    shap.waterfall_plot(exp, max_display=15, show=False)
+    ax = plt.gca()
+    fix_shap_plot_dark(ax)
+    st.pyplot(fig, use_container_width=False)
     plt.close(fig)
 
-    st.markdown("""
-### Interpretation
-- **Red bars** increase the predicted value.
-- **Blue bars** decrease it.
-- Left = base value (model average), right = final prediction.
+    # -------------------------
+    # Automated Interpretation
+    # -------------------------
+    st.markdown("## 📘 Automated Local Interpretation")
+
+    df_feat = pd.DataFrame({
+        "feature": features,
+        "shap": shap_values,
+        "abs_shap": np.abs(shap_values)
+    }).sort_values("abs_shap", ascending=False)
+
+    total_abs = df_feat["abs_shap"].sum() + 1e-8
+    top5 = df_feat.head(5)
+    perc_top5 = top5["abs_shap"].sum() / total_abs * 100
+
+    pos = df_feat[df_feat["shap"] > 0].head(3)
+    neg = df_feat[df_feat["shap"] < 0].head(3)
+
+    def _fmt(df):
+        if df.empty:
+            return "_None_"
+        out = []
+        for _, r in df.iterrows():
+            out.append(f"- **`{r['feature']}`** → SHAP = **{r['shap']:.2f}**")
+        return "\n".join(out)
+
+    st.markdown(f"""
+### 🔍 Prediction breakdown
+
+- **Base value (average model output):** `{base_value:.2f}`  
+- **Sum of SHAP effects:** `{total_contrib:.2f}`  
+- **Raw prediction:** `{raw_prediction:.2f}` trips  
+- **Clipped prediction:** `{clipped_prediction:.2f}` trips  
+
+### 🎯 Which features matter most?
+
+- The **top 5 features** account for **{perc_top5:.1f}%** of the total explanatory power.
+
+### 🔺 Features increasing the prediction
+{_fmt(pos)}
+
+### 🔻 Features decreasing the prediction
+{_fmt(neg)}
+
+---
+
+### 🧩 How to read the waterfall plot
+
+- The prediction starts from the **base value**.
+- **Red bars** push the prediction **down**.
+- **Blue bars** push the prediction **up**.
+- The final point is the model’s output for this specific OD + date.
+
+This plot tells you precisely **why the model predicted that number of trips**.
 """)
