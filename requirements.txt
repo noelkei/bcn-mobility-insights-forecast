@@ -50,3 +50,5 @@ jupyterlab==4.2.5
 
 # ---- Optional ----
 altair
+gdown
+statsmodels
