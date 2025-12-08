@@ -1,1 +1,48 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*$py.class
 
+# -------------------------
+# Virtual environments
+# -------------------------
+.venv/
+env/
+venv/
+
+# -------------------------
+# Jupyter
+# -------------------------
+.ipynb_checkpoints/
+
+# -------------------------
+# Streamlit cache
+# -------------------------
+.streamlit/
+
+# -------------------------
+# System files
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# PyCharm / IntelliJ
+# -------------------------
+.idea/
+*.iml
+
+# -------------------------
+# Model artifacts
+# -------------------------
+*.joblib
+*.h5
+
+# -------------------------
+# Data to ignore (uncomment if needed)
+# data/raw/
+# data/processed/
